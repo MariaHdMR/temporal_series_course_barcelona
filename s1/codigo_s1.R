@@ -38,3 +38,22 @@ bird_pops_long<- bird_pops_long %>%
 #We can have a look 
 
 head(bird_pops_long$Species_name)
+
+#filtering the data
+
+falco_data <- bird_pops_long %>% 
+  filter(Species_name=="Falco peregrinus", 
+         Country.list=="Spain")
+
+# Look at the data 
+
+falco_data
+
+# si a la hora de filtrar queremos seleccionar varios, podemos coger: species_name %in% c("falco peregrinus", "fagus sylvatica)
+
+
+# task 
+anas_data <- bird_pops_long %>% 
+  filter(Species_name=="Anas platyrhynchos", 
+         Country.list=="United Kingdom")
+head(anas_data)
