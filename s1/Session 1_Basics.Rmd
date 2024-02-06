@@ -1,0 +1,549 @@
+---
+title: "Introduction to time series analyses"
+subtitle: "Session 1: Using R for Time Series Analysis- the basics"
+output: 
+    html_document:
+      toc: true
+      toc_float: true
+      theme: paper
+      highlight: pygments
+      code_folding: show
+      df_print: paged
+author: 
+  - Pol Capdevila^[Universitat de Barcelona, pcapdevila@ub.edu]
+---
+<style type="text/css">
+
+body, td {
+   font-size: 20px;
+}
+code.r{
+  font-size: 16px;
+}
+pre {
+  font-size: 16px
+}
+body {
+text-align: justify}
+</style>
+
+```{=html}
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  TeX: { equationNumbers: { autoNumber: "AMS" } }
+});
+</script>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+# Introduction
+
+In this tutorial, we will introduce the very basics of time series analyses in R. While there are multiple applications to the analyses of time series, in this session we will focus on:
+
+1.  Data manipulation.
+2.  Merging data with a time series.
+3.  Visualising a time series.
+
+In this tutorial we will focus on population time series, so time series with low frequency, in the next Session we will focus on high frequency time series.
+
+# Before starting
+
+We will use some specific `R` packages to play with the data, please make sure you have them installed and that you have loaded them.
+
+```{r packages}
+library(tidyverse)
+library(broom)
+library(MetBrewer)
+library(cowplot)
+library(maps)
+library(mapdata)
+```
+
+Also, please make sure you set your working directory where you have the data.
+
+```{r working directory}
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+```
+
+As a data set we will use a subset of the [Living Planet Index Database](https://livingplanetindex.org/data_portal) which contains population time series for \~15,000 animal populations from \~3500 species across the world. During the workshop, we will play with a subset of these data only including bird populations.
+
+# Data manipulation
+
+## Loading the data
+
+Let's get started. First we load the data and have a look at it.
+
+```{r load data1}
+bird_pops <- read.csv(file="bird_pops.csv")
+# We examine the data.
+head(bird_pops)
+
+```
+
+As you can see there are multiple columns in this data set, make sure you understand them.
+
+## Data reshaping
+
+Currently the data is in wide format, but we might want to make it longer, what will help us with the plots and some analyses. The `tidyverse` package provides functions for reshaping data from wide to long (`pivot_long`) and from long to wide (`pivot_wide`), which are helpfully the inverse of one another. To apply this function across the data set we will use what is called a pipe (`%>%`) from the package `tidyverse`. A pipe is just a way of chaining a series of functions together, and it means that you don't have to save objects out of a function and then push those objects into another function - the data created using one function are passed straight to the next function in the chain. To give you a broad idea of how we build these chains in `R` they take the form of: (1) the data you want to apply the function/s to, (2) the function/s you want to apply, separated by a new operator `%>%`.
+
+For example:
+
+```{r pipe example, eval=F}
+
+my_data %>% function_1() %>% function_2()
+
+```
+
+::: {align="center"}
+This reads as "take my_data, apply `function_1()` to that data, then apply `function_2()` to that data produced when I apply `function_1()`".
+:::
+
+Let's go back to the pivoting example. Now we are going to pivot our data set into a long format using the `pivot_longer` function.
+
+```{r pivoting}
+bird_pops_long <-bird_pops %>% 
+  pivot_longer(cols=c(24:68), # Columns we want to pivot over (in this case years)
+               names_to ="Year", # Years will be the previous column names
+               values_to= "Abundance") # Abundance will contain the values of those columns 
+
+# We can have a look at the data
+head(bird_pops_long)
+
+```
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### Question
+
+Why do we select the columns 24:68?
+:::
+
+------------------------------------------------------------------------
+
+## Cleaning the data
+
+Now that we have the data in a long format, it will be easier to clean and correct it. For example, we don't have a column with the species names, instead we have separate columns with `Genus` and `Species`. We can create a column called `Species_name` using the function `mutate`from the package `dplyr`. Also, we can correct the years using the function `parse_number` from the package `tidyverse`. To apply these two functions consecutively we will also use the pipes (`%>%`).
+
+```{r clean data}
+
+bird_pops_long<- bird_pops_long %>% 
+  # First we create a column named Species_name using the function paste applied on genus and species. 
+  mutate(Species_name=paste(Genus, Species), 
+  # Then, we apply the function parse_number to correct numbers in the column Years
+         Year=parse_number(Year))
+
+#We can have a look 
+
+head(bird_pops$Species_name)
+
+```
+
+## Filtering data
+
+Imagine that we are only interested in a single species. We can subset the data using the `filter()` function from the package `dplyr`. Filter works with logical operators (e.g. ==, \>, \>=) as well as other functions - see [here](https://dplyr.tidyverse.org/reference/filter.html) for some examples. In this case, we will only keep populations of `Falco peregrinus` from Spain.
+
+```{r filter}
+
+falco_data <- bird_pops_long %>% 
+  filter(Species_name=="Falco peregrinus", 
+         Country.list=="Spain")
+
+# Look at the data 
+
+falco_data
+
+```
+
+You can see that now we have a single time series which belongs to a population of *Falco peregrinus* from Delta del Ebro, Spain.
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### Task
+
+Filter the data for the populations of *Anas platyrhynchos* in the UK.
+:::
+
+------------------------------------------------------------------------
+
+## Explore and summarise the data
+
+We can also use the pipes to explore our data in more detail. For example, we can explore which time series is the longest within our data set. To do that, we need to do multiple steps in our pipe.
+
+1.  First, we will remove all the populations with no data in the `Abundance` column using the function `drop_na()`.
+2.  Then, we will calculate the maximum and minimum years of each time series to then calculate the duration by subtracting the max and min years.
+3.  To identify each of the time series we will use the function `group_by()`. This function allows us to group our variables according to a specific column, in our case of bird populations we will use the `id` of the time series.
+4.  Then, because we have multiple duration values for the same time series, we will use the function `distinct()`. **IMPORTANT:** we need to specify the `.keep_all=TRUE` argument in the `distinct()` function, otherwise we lose all the other columns!!
+5.  Also, to make it easier to see which populations are the ones with longer time series we can use the function `select()` to only visualise the columns `id`, `Species_name` and `Duration`.
+6.  Finally, we will use the function `arrange()` to order the data according to the duration of years and will use the function `desc()`, to go from longer to shorter time series.
+
+```{r duration}
+
+bird_pops_long %>%
+  # Remove NA from Abundance
+  drop_na(Abundance) %>% 
+  # Group rows so that each group is one population
+  # *** group_by() function from dplyr
+  group_by(id) %>%  
+  # Make some calculations
+  # *** mutate() function from dplyr
+  mutate(maxyear = max(Year), 
+         minyear = min(Year),
+         # Calculate duration
+         Duration = maxyear - minyear) %>%
+  # Remove any groupings we have created in the pipe
+  ungroup() %>% 
+  # Remove duplicate time series
+  distinct(id, .keep_all=T) %>% 
+  # Select the columns Species_name and Duration 
+  select(id, Species_name, Duration) %>% 
+  # Use arrange to order the data from longer to shorter time series
+  arrange(desc(Duration))
+
+```
+
+We can also look for which taxonomic Order have the most data using again `group_by()` and the function `tally()`. `tally()` allows us to count the unique values of one or more variables.
+
+```{r tally}
+
+# Using "group_by()" to calculate a "tally"
+# for the number of records per Order
+
+bird_pops_long %>% 
+  drop_na(Abundance) %>% 
+  group_by(Order) %>% 
+  tally() %>%
+  arrange(desc(n))
+```
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### Task
+
+Which country has the longest population time series?
+
+Which country has the highest number of population time series?
+:::
+
+------------------------------------------------------------------------
+
+# Merging data with time series
+
+In the era of big data and multi/interdisciplinarity an important skill to learn is how to combine our data with other data sets. Now that we have sorted out our data, we will merge it with information about species' diet.
+
+First, we load the data:
+
+```{r read traits}
+
+bird_diet <- read.csv("elton_birds.csv")
+
+# Let's have a look
+
+head(bird_diet)
+
+```
+
+Before merging the data we will clean it. We don't really want ALL of the columns in the diet data, so we can use the `select()` function to specify which columns we want. In this case, we are only interested in the `Diet.5Cat` (diet category) and `Scientific` (the scientific name of the species). We will use `Scientific` to match with the species names in `birds_pop_long`. Because `Diet.5Cat` is a complicated name, we will also rename it to `diet` using the function `rename()`.
+
+```{r diet select and rename}
+
+# Select just the species and their diet
+bird_diet <- bird_diet %>% 
+  dplyr::select(Scientific, `Diet.5Cat`) %>% 
+  distinct(Scientific, .keep_all = T) %>% rename(diet = `Diet.5Cat`)
+
+```
+
+To join the different data sets we will use the family of functions `_join()`. You can explore the full functionality of `_join()` functions [here](https://dplyr.tidyverse.org/articles/two-table.html?q=left_join#types-of-join). In our case we will use `left_join()` which returns all rows from x (bird_pops_long), and all columns from x and y (bird_diet). It is very important to have a common column that identifies our species in the two data sets. In this case, we will use the `Species_name` in `bird_pops_long` and `Scientific` in `bird_diet`.
+
+```{r diet join1}
+
+# Join the two data sets
+bird_all <- bird_pops_long %>% 
+  left_join(bird_diet, by=c("Species_name"="Scientific")) # Notice that we select the two columns here that we want to match 
+
+# We explore
+head(bird_all, 2)
+
+```
+
+We could even have done these two steps in one single piece of code by concatenating the two pipes.
+
+```{r join2, eval=F}
+
+bird_all <- bird_pops_long %>% 
+  left_join(bird_diet %>% dplyr::select(Scientific, `Diet.5Cat`) %>% 
+  distinct(Scientific, keep_all=T) %>% 
+    rename(diet = `Diet.5Cat`, Species_name=Scientific)) 
+```
+
+We will have a more detailed look at this data set during Session 2 so we will safe it.
+
+```{r save, eval=F}
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+write.csv(bird_all, "birds_all.csv") 
+
+```
+
+# Visualising time series
+
+There are a lot of methods for making nice plots in R. There are simple methods (like `plot()` in base `R`) and there are others that might not be so easy. Here, we will use a package that is one of the most flexible and widely used plotting methods, `ggplot`.
+
+*Note* -`ggplot` is also part of the `tidyverse`, so you don't need to load it separately when you load `tidyverse` .
+
+## Basic plot using `ggplot`
+
+Because `ggplot` is part of the `tidyverse` it uses a similar syntax, in the sense that we stack arguments up to create finished chunks of code. For this example we will only use populations of the species _Falco peregrinus_.
+
+```{r plot basic}
+
+falcon <- bird_all %>% filter(Species_name=="Falco peregrinus")
+
+## make a ggplot object
+ggplot(data = falcon, aes(x = Year, y = Abundance))
+
+```
+
+So here we have told `ggplot()` we want to use the `bird_all` data and that the x-axis will be the `Year` of our data frame, and that the y-axis will be the `Abundance` of our data frame.
+
+I would like you to look at the plot twice, yes, you are right, we haven't actually plotted anything! All we have made here is the basic `ggplot` object (that's what the function ggplot does) but we haven't told `ggplot` what kind of plot we want.
+
+## Using the `geom_...()` function
+
+Understanding the power of `ggplot` means understanding the role of two key components - `geoms` and how `ggplot` deals with grouped data. Let's consider the `geom` bit first.
+
+To plot a time series, probably the best way to do it is by using a scatter plot, which gives us an easy way to visually check the data. To indicate to `ggplot` that we want a scatter plot, we can use the function `geom_point()`. So, for a scatter plot:
+
+```{r plot point}
+
+## make a ggplot object
+ggplot(data = falcon, aes(x = Year, y = Abundance)) +
+  geom_point()
+
+```
+
+`geom_...()` is given as a separate argument after we specify the data and aesthetics we can easily swap between `geom_point()` and another type of `geom_...()` without recoding anything but this additional argument. This might sound trivial but its pretty revolutionary - especially when plots become complicated. It also means we can stack `geoms` - assuming they can be plotted on the same axis:
+
+```{r plot colour}
+
+## make a ggplot object
+ggplot(data = falcon, aes(x = Year, y = Abundance)) +
+  geom_point(col="red")+
+  geom_line()
+
+```
+
+*Note* - There are two things to note in the plot above. (1) you can manually change the colour of the lines or points using `col =`, and (2) `ggplot` will layer the lines/points/etc in the order you specify them - i.e. above there are points with a line plotted over the top because we used `geom_point()` and then `geom_line()` in the code.
+
+There are a number of `geom`'s available (see [here](https://ggplot2.tidyverse.org/reference/) for a complete list) which allow you to plot a large number of different kinds of graphic (e.g. histogram, barplot, map, polygon, point, dotplot, violin plot, etc...) and the way `ggplot` is set up means that once you have mastered the basic syntax it opens up lots of potential plots for you to make without having to do/learn much additional coding.
+
+## Grouped data
+
+You may have noticed that after all we have said, our graph hasn't improved much, if anything, it looks quite ugly. The reason is because we have lots of data, which is often hard to visualise elegantly. Luckily for us `ggplot` makes our life much easier by using the argument `group`, `colour` and `fill`. Notice that if we `group`and `colour` our plot by time series, we can actually improve it a bit.
+
+```{r plot point and lines}
+
+## make a ggplot object
+ggplot(data = falcon, aes(x = Year, y = Abundance, group=id, colour=id)) +
+  geom_point()+
+  geom_line()
+
+```
+
+We could try to separate the for different countries. To do that, we can use the function `facet_wrap()`. `facet_wrap()` can take up to two groups to facet by (and will make a grid of plots). You can also use `facet_grid()` which forces the plots to be on a grid, whilst `facet_wrap()` puts them onto a grid but allows the positions not to be determined by the groups.
+
+Because you aren't specifying an aesthetic you don't need the `aes()` argument for the `facet_()` functions but you need need to use the `~`, which in `R` means "as a function of". So we want to facet our data as a function of `Country.list`. If you have two groups to facet by, you specify them as `facet_wrap(x ~ y)`. In our case we only have one, so we replace the x with a `.`.
+
+```{r plot wrap}
+
+## make a ggplot object
+ggplot(data = falcon, aes(x = Year, y = Abundance, group=id)) +
+  geom_point()+
+  geom_line()+
+  facet_wrap(.~Country.list)
+
+```
+
+Better but it still looks messy because we have lots of data and it is very challenging to plot all of them at once. This is a situation you will face a lot when working with time series. As a first step, what we can do in this case is to use the previous function `filter()` to clean a bit the data. For example, we included all the time series, while we could keep just time series that are longer than 4 years (a common criteria in population time series analyses). Because the data are at very different scales we can also log-transform abundance to make it easier to see the different time series per country. So let's see how it looks.
+
+```{r plot and filter}
+
+falcon %>%
+  group_by(id) %>% 
+  drop_na(Abundance) %>% 
+  filter(length(unique(Year))>4) %>%
+  ungroup() %>% 
+  mutate(logabundance= log(Abundance+1)) %>% 
+    ggplot(aes(x = Year, y = logabundance, group=id)) +
+    geom_point()+
+    geom_line()+
+    facet_wrap(~Country.list, scales = "free_y")
+
+```
+
+To make it even easier to read, we can add some colours to the different countries using `colour=Country.list`. I will define my own palette using the package `MetBrewer` which contain palettes of different piece of art. Check out the package [here](https://github.com/BlakeRMills/MetBrewer). We will indicate this using the function `scale_colour_manual()` from `ggplot` where the argument `values=` allows us to specify the colours we want to add as palette. Then we use `met.brewer()` a function that will define the colours for us, we just need to select the palette (we will use `"Housaki1"`) and the number of colours (7, equal to the number of countries).
+
+```{r plot and colour}
+
+falcon %>%
+  group_by(id) %>% 
+  drop_na(Abundance) %>% 
+  filter(length(unique(Year))>4) %>%
+  ungroup() %>%
+  mutate(logabundance= log(Abundance+1)) %>% 
+  ggplot(aes(x = Year, y = logabundance, 
+             group=id, 
+             colour=Country.list)) +
+  geom_point()+
+  geom_line()+
+  facet_wrap(~Country.list)+
+  scale_colour_manual(values = met.brewer("Hokusai1", 7))
+
+```
+
+## Final touches to your plots
+
+`ggplot` gives us a lot of options in how to make our plot ready for publication. We are not going to cover all of them in this course but we can have a look at some basics. For example, using the function `theme()` from `ggplot` we can actually modify many aspects of our plot. You can explore `theme` fully [here](https://ggplot2.tidyverse.org/reference/theme.html).
+
+What we will do is
+
+1.  To increase the text size in both axis with `axis.title` and using the `element_text` argument, were we set the `size=`. We make the line of the axis a bit thicker using `axis.line = element_line(color="black", size = 0.5)`.
+2.  Set the grid as blank using `panel.grid.major` and `panel.grid.minor` and setting it as `element_blank()`.\
+3.  The text of the axis is set to 12 using `axis.text = element_text(color="black", size = 12)`.
+4.  We set size of the text in the facet with `strip.text.x = element_text(size = 12)` and define the axis ticks with `axis.ticks = element_line(color="black")`.
+5.  Also notice that we use a default theme, called `theme_minimal()` which allows us to get rid of extra stuff without bothering to define it ourselves.
+6.  Finally, to set this theme as default (all our ggplots will be plotted with that theme) we can use the function `theme_set()`.
+
+```{r theme}
+
+theme_set(theme_minimal()+
+            theme(axis.title = element_text(size=15),
+                  axis.line = element_line(color="black", size = 0.5),
+                  panel.grid.major = element_blank(), 
+                  panel.grid.minor = element_blank(),
+                  axis.text = element_text(color="black", size = 12),
+                  strip.text.x = element_text(size = 12),
+                  axis.ticks = element_line(color="black")))
+
+
+```
+
+We will also remove (only for this plot) the legend, because it is redundant, using `theme(legend.position="none")`. To have the same x axis for all the plots we will combine two separate things, we will set `scales = "free_x"` at `facet_wrap()` to set the scales free, and will use `xlim()` to set the same limits for all of them. Now we are ready to plot it. We can also modify the axis names, to make them prettier using the function `labs()`.
+
+```{r plot final temp plot}
+
+falcon %>%
+  group_by(id) %>% 
+  drop_na(Abundance) %>% 
+  filter(length(unique(Year))>4) %>%
+  ungroup() %>%
+  mutate(logabundance= log(Abundance+1)) %>% 
+  ggplot(aes(x = Year, y = logabundance, 
+             group=id, 
+             colour=Country.list)) +
+  geom_point()+
+  geom_line()+
+  facet_wrap(~Country.list, scales = "free_x")+
+  scale_colour_manual(values = met.brewer("Hokusai1", 7))+
+  xlim(min(falcon$Year), max(falcon$Year))+
+  labs(y="Abundance", x="Year", title="Example plot time series")+
+  theme(legend.position = "none")
+
+```
+
+## Saving plots
+
+Ok, so we have made some plots, but how do we save them to use them in a publication?
+
+ggplot has all sorted, you can use the function `ggsave()` to save your plot. The function has some arguments where you can specify, for example, the size of the plot `height` and `width`. You also need to specify the name of the plot and the type of **archive you want (pdf, eps, jpeg)** "Figure 1.pdf". It is also recommended to save the plot in a specific object, giving it the name you want, such as `fig.1`. See the example below.
+
+```{r plot saving}
+
+fig1 <- falcon %>%
+  group_by(id) %>% 
+  drop_na(Abundance) %>% 
+  filter(length(unique(Year))>4) %>%
+  ungroup() %>%
+  mutate(logabundance= log(Abundance+1)) %>% 
+  ggplot(aes(x = Year, y = logabundance, 
+             group=id, 
+             colour=Country.list)) +
+  geom_point()+
+  geom_line()+
+  facet_wrap(~Country.list, scales = "free_x")+
+  scale_colour_manual(values = met.brewer("Hokusai1", 7))+
+  xlim(min(falcon$Year), max(falcon$Year))+
+  labs(y="Abundance", x="Year", title="Example plot time series")+
+  theme(legend.position = "none")
+
+ggsave("Figure1.pdf", fig1, width=10, height = 8)
+
+```
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### Task
+
+Plot the time series of *Anas platyrhynchos* across Europe.
+:::
+
+------------------------------------------------------------------------
+
+## Bonus: Plotting a map of your time series
+
+If you need to show the sampling locations of your data at a global scale or at a coarse resolution, you can also use `ggplot`. The only important thing to have is: (i) the coordinates of your sampling sites (obviously), (ii) a background map. For (ii) you can use the packages `maps` and `mapdata` which contain global maps at coarse resolution, which are ideal to plot our data at a global scale (for example). See the code below for an example.
+
+```{r map}
+# Set the world map
+ 
+world <- map_data("world")
+
+# We will filter the interested data
+
+data_map <- bird_all %>% 
+  drop_na(Abundance) %>% # Remove NAs
+  distinct(id, .keep_all=T) %>% #Remove duplicate time series
+  select(id, Species_name, Decimal.Latitude, Decimal.Longitude) # Select columns of interest
+  
+# Now we plot  
+
+ggplot() +
+  # We create the map with the map data 
+  geom_map(map = world, data = world,
+           aes(long, lat, map_id = region), 
+           color = "gray70", fill = "gray70", size = 0.3) +
+    theme_map() +
+  # We add our data
+    geom_point(data = data_map, 
+               aes(x = Decimal.Longitude, 
+                   y = Decimal.Latitude),
+               alpha=0.6) +
+    scale_y_continuous(limits = c(-80, 80))
+
+```
+
+## Interesting references
+
+[Data manipulation with tidyverse](https://dplyr.tidyverse.org/)
+
+[Cheatsheets for R](https://www.rstudio.com/resources/cheatsheets/)
+
+[ggplot](https://ggplot2.tidyverse.org/)
+
+[Cheatsheets for R](https://www.rstudio.com/resources/cheatsheets/)
+
+[Plotting time series R graph gallery](https://r-graph-gallery.com/time-series.html)
+
+# Session info
+
+For ease of reproducibility
+
+```{r session info}
+sessionInfo()
+```
