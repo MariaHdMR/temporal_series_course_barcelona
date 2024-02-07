@@ -115,3 +115,74 @@ ants_wide <- ants_long %>%
 
 dim(ants_wide) # ya esta solucionado el problema
 
+
+
+# How do the number of species change across years?
+ants_long %>% 
+  group_by(year) %>% 
+  summarise(n_species = n_distinct(code)) %>% # count the number of different species by year
+  ggplot(aes(x = year, y = n_species)) +
+  geom_line() +
+  geom_point(size = 3) +
+  geom_smooth(se = F) +
+  #making the plot fancier:
+  geom_text(aes(label = n_species), nudge_y = 1) + # adding the number of species as a label
+  geom_vline(aes(xintercept = 2005, color = "logging"), linetype = "dashed") + # indicate logging year
+  guides(color = guide_legend(title = NULL)) +
+  scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2)) +
+  # a sequence taking the limitis of the axis
+  labs(y = "richness")
+
+#How does total ant abundance change among species
+ants_long %>% 
+  group_by(year) %>% 
+  summarise(total_abundance = sum(total_abundance)) %>% 
+  ggplot(aes(x = year, y = total_abundance)) +
+  geom_line() + geom_point(size = 3) +
+  geom_smooth(se = F) +
+  geom_vline(aes(xintercept = 2005, color = "logging"), linetype = "dashed") + # indicate logging year
+  guides(color = guide_legend(title = NULL)) +
+  scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2)) +
+  labs(y = "Number of ants\nacross all species")
+
+#How does total ant abundance change across years?
+ants_long %>%
+  group_by(genus, species) %>% 
+  summarise(total_abundance = sum(total_abundance,
+                                  na.rm = T)) %>% 
+  ggplot(aes(x = reorder(paste(genus, species),
+                         -total_abundance), # x axis are complete species names ordered by their abundance
+             y = total_abundance)) + 
+  geom_col(color = "black", fill = "grey") +
+  labs(y = "Number of ants\nacross all years") +
+  theme(axis.text.x = element_text(face = "italic",
+                                   angle = 90,
+                                   vjust = .25,
+                                   hjust = 1),
+        axis.title.x = element_blank()) 
+
+# Is tis RAD maintained accross years?
+
+# let's have first the order we obtained in the overall RAD
+ordered_ab <- ants_long %>%
+  group_by(code) %>% 
+  summarise(total_abundance = sum(total_abundance, na.rm = T)) %>% 
+  arrange(desc(total_abundance))
+
+# and apply this overall order to yearly RADs
+ants_long %>% 
+  mutate(code = factor(code,levels = ordered_ab$code)) %>%
+  split(.$year) %>% 
+  map2(names(.), #esto es para iteracionar y guardar los plots con nombres
+  #map(
+    ~ ggplot(data = .x, aes(x = code, y = total_abundance)) + 
+      geom_col(color = "black", fill = "grey") +
+      scale_x_discrete(drop = F) +
+      ylim(0,130) +
+      theme(axis.text.x = element_text(face = "italic", angle = 90, vjust = .25, hjust = 1,
+                                       size = 8),
+            strip.text = element_text(size = ),
+            axis.title.x = element_blank(),
+            panel.border = element_rect(fill = NA))
+  )
+# + labs(title = .y))
