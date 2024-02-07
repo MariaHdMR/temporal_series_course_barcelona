@@ -57,6 +57,7 @@ head(pops_sum)
 falco_pops <- bird_all %>%
   filter(Species_name=="Falco peregrinus")
 
+
 #deterministic approach:
 # opcion de crear una funcion
 
@@ -225,3 +226,123 @@ bird_all %>% # esto no se si funciona bien, comprobar
 ggplot(bird_all, aes(x = pop_growth, y=diet, color= diet))+
   #facet_wrap(~Species_name)+
   geom_point(width= 0.1)
+
+
+
+#### dia 7 febrero
+
+falco_pops <- falco_pops %>%
+  # Group by id to scale the abundance over each time-series
+  group_by(id) %>%
+  # Scale the abundance as a proportional change based on the
+  # maximum abundance 
+  mutate(sabundance = Abundance/(max(Abundance,na.rm = T))) %>%
+  # Remove any groupings we have created in the pipe
+  ungroup()
+
+# ahora lo que vamos a hcer es hacer un modelo lineal para cada una de las series temporales
+
+falco_models <- falco_pops %>%
+  # Nest by the key variables that we want to iterate over note that if we only include e.g. id (the population id), then we only get the id column in the model summary, not e.g. latitude, class...
+  nest_by(id, Species_name, Class) %>%
+  # Create a linear model for each group
+  mutate(mod = list(lm(sabundance ~ Year, data = data))) %>%
+  # Extract model coefficients using tidy() and summarise
+  summarise(tidy(mod)) %>% 
+  # Filter out slopes and remove intercept values
+  filter(term == "Year") %>%
+  # Get rid of the column term as we don't need it any more
+  dplyr::select(-term) %>%
+  # Remove of the groupings 
+  ungroup()
+# el nest by lo que hace es meter una lista en una de las celdas
+
+# Let's have a look at the slopes
+
+ggplot(falco_models, aes(estimate)) +
+  geom_histogram()+
+  geom_vline(xintercept = 0,linetype="dashed" ) +
+  labs(y="Abundance", x="Slope")
+
+# Let's check the mean value of the slope
+
+(mean.slope <- falco_models %>% 
+    summarise(mean=mean(estimate)))
+
+#ahora lo que teneos es el plot con cada uno de los puntos reales y las lineas son lo que sale con el modelo
+ggplot(falco_pops, aes(x=Year, y=sabundance, group=id))+
+  geom_point(aes(fill=id), shape=21)+#shape 21 is filled with colour and black around it, that is why we need to specify the fill=id
+  geom_smooth(aes(colour=id), method="lm", se=F) +#we set colour=id here because we want separate coloured lines. We also set se=F to remove the confiedence intervals (this is only for visualisation purposes).
+  theme(legend.position = "none")
+
+
+#models
+m <- glmmTMB(Abundance ~ Year+ (1|id), falco_pops, family=poisson())
+
+# Check the model outputs
+
+summary(m)
+
+# Check the residuals with DHARMa
+
+plot(simulateResiduals(fittedModel = m, plot = F))
+
+
+# Check the autocorrelation of the residuals
+
+acf(resid(m))
+
+# para que no tenga correlacion espacial lo que se haría seria tener las lineas entre la franja azul. Lo mejor
+# seria tener casi todas las lienas entre la franja azul. 
+
+
+# Let's compare the slope with the previous value from the linear models
+
+ggplot(falco_models, aes(estimate)) +
+  geom_histogram()+
+  geom_vline(xintercept = 0,linetype="dashed" ) +
+  geom_vline(xintercept = mean(coefficients(m)$cond$id$Year),
+             linetype="dashed", colour="red" ) +
+  geom_label(aes(x = mean(coefficients(m)$cond$id$Year),
+                 y = 4,label="Mixed model"), nudge_x = -0.01, 
+             linetype="dashed", colour="red" ) +
+  labs(y="Abundance", x="Slope")
+
+
+# Model with temporal autocorrelation
+
+m2 <- update(m, ~ Year+ (1|id) + ar1(as.factor(Year)|id))
+
+# Check the model outputs
+
+summary(m2)
+
+#Check the residuals with DHARMa
+
+plot(simulateResiduals(fittedModel = m2, plot = F))
+
+# Check the autocorrelation of the residuals
+
+acf(resid(m2)) # siempre la primera linea se saldrá, ya que es cero
+
+# Let's compare the model fit 
+
+AIC(m2, m)
+
+# We compare again the slope with the previous value from the linear models
+
+ggplot(falco_models, aes(estimate)) +
+  geom_histogram()+
+  geom_vline(xintercept = 0,linetype="dashed" ) +
+  geom_vline(xintercept = mean(coefficients(m)$cond$id$Year),
+             linetype="dashed", colour="red" ) +
+  geom_label(aes(x = mean(coefficients(m)$cond$id$Year),
+                 y = 4,label="Mm without \n autocorrelation"), nudge_x = -0.01, 
+             linetype="dashed", colour="red" ) +
+  geom_vline(xintercept = mean(coefficients(m2)$cond$id$Year),
+             linetype="dashed", colour="blue" ) +
+  geom_label(aes(x = mean(coefficients(m2)$cond$id$Year),
+                 y = 2,label="Mm with \n autocorrelation"), 
+             nudge_x = -0.01, 
+             linetype="dashed", colour="blue" ) +
+  labs(y="Abundance", x="Slope")
