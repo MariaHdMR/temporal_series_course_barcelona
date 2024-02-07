@@ -285,4 +285,83 @@ ants_long %>%
   summarise(n_year = n_distinct(year)) %>% 
   filter(n_years == nrow(ants_wide))
 
+###ABUNDANCE-BASED ANALYSES
+ants_wide %>%  
+  na.omit() %>% 
+  vegan::vegdist(method = "jaccard", binary = T) %>% # Binary = T: incidence-based calculation
+  # we obtain a distance object (i.e. the lower triangle of the distance matrix stored by columns in a vector)
+  as.matrix() %>% # from a distance object to a matrix object
+  as.data.frame() %>% # from matrix to data.frame
+  rownames_to_column(var = "year1") %>% 
+  pivot_longer(cols = -year1,
+               names_to = "year2",
+               values_to = "distance") %>% # we pivot the object for visualisation purposes
+  mutate(across(.cols = c(year1, year2), .fns = as.numeric)) %>% 
+  ggplot(aes(x = year1, y = year2)) +
+  geom_tile(aes(fill = distance), color = "white") +
+  geom_text(aes(label = round(distance, 2)), size = 2) + 
+  scale_fill_viridis_c(option = "B", limits = c(0, 1)) +
+  labs(title = "Jaccard dissimilarity index (incidence-based)",
+       subtitle = "i.e. turnover rate") +
+  theme(axis.text.x = element_text(angle = 30, hjust = .5, vjust = .5),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
 
+#hen measuring the distance between two points, our geometrically-trained brain tends to calculate it following the Pythagorean theorem (i.e. the Euclidian distance). Use the vegdist function from the vegan package to calculate the Euclidian distance for all sample combinations of the community. What do you think? 
+#Do you find this metric appropriate for analysing community dissimilarity? Why?
+
+ants_wide %>%  
+  na.omit() %>% 
+  vegan::vegdist(method = "euclidean") %>% # Binary = T: incidence-based calculation
+  # we obtain a distance object (i.e. the lower triangle of the distance matrix stored by columns in a vector)
+  as.matrix() %>% # from a distance object to a matrix object
+  as.data.frame() %>% # from matrix to data.frame
+  rownames_to_column(var = "year1") %>% 
+  pivot_longer(cols = -year1,
+               names_to = "year2",
+               values_to = "distance") %>% # we pivot the object for visualisation purposes
+  mutate(across(.cols = c(year1, year2), .fns = as.numeric)) %>% 
+  ggplot(aes(x = year1, y = year2)) +
+  geom_tile(aes(fill = distance), color = "white") +
+  geom_text(aes(label = round(distance, 2)), size = 2) + 
+  scale_fill_viridis_c(option = "B", limits = c(0, 160)) +
+  labs(title = "euclidian dissimilarity index (incidence-based)")+
+       #subtitle = "i.e. turnover rate") +
+  theme(axis.text.x = element_text(angle = 30, hjust = .5, vjust = .5),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+
+hell_vector <- ants_wide %>% 
+  na.omit() %>% 
+  vegdist(method = "hellinger") %>% 
+  as.numeric()
+
+lag_vector <- ants_wide %>% 
+  na.omit() %>% 
+  rownames() %>% 
+  as.numeric() %>% 
+  vegdist(method = "euclidean") %>% 
+  as.numeric()
+
+lag_df <- data.frame(hell_dist = hell_vector,
+                     time_lag = lag_vector)
+
+linear <- lm(hell_dist ~ time_lag, data = lag_df)
+summary(linear)
+
+lag_df %>% 
+  ggplot(aes(x = time_lag, y = hell_dist)) +
+  geom_point(alpha = .5, size = 4) +
+  geom_smooth(method = "lm", se = F, size = 1) + # fit a regression line
+  scale_x_continuous(breaks = seq(2, 12, by = 2)) +
+  labs(x = "Time lag (years)",
+       y = "Hellinger distance")
+
+lag_df %>% 
+  ggplot(aes(x = time_lag, y = hell_dist)) +
+  geom_point(alpha = .5, size = 4) +
+  geom_smooth(method = "gam", se = T, size = 1) + # fit a regression line, different that a linear
+  scale_x_continuous(breaks = seq(2, 12, by = 2)) +
+  labs(x = "Time lag (years)",
+       y = "Hellinger distance")
