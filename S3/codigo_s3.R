@@ -186,3 +186,103 @@ ants_long %>%
             panel.border = element_rect(fill = NA))
   )
 # + labs(title = .y))
+
+#Turnover analysis: did the taxonomic composition of the community change over time?
+
+ants_turnover <- ants_long %>% 
+  mutate(total_abundance = 1) %>% # to include 2007 in the turnover analysis
+  codyn::turnover(time.var = "year",
+                  species.var = "code",
+                  abundance.var = "total_abundance")
+ants_turnover %>% 
+  ggplot(aes(x = year, y = total)) +
+  geom_point() + geom_line() +
+  geom_vline(aes(xintercept = 2005), linetype = "dashed", color = "black") +
+  scale_color_viridis_d(direction = -1) +
+  scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 1)) + 
+  labs(title = "Community turnover relative to the preceding sample",
+       x = "Year",
+       y = "Turnover") +
+  ylim(0, 1) +
+  theme(axis.text.x = element_text(angle = 30, vjust = 1, hjust = 1))
+
+# vamos a añadir mas datos para entender mejor el grafico
+ants_cols <- ants_long %>% 
+  mutate(total_abundance = 1) %>% 
+  turnover(time.var = "year",
+           species.var = "code",
+           abundance.var = "total_abundance",
+           metric = "appearance") #appereance and isapperance lo tiene en cuenta la 
+# funcion, no lo hace 
+
+ants_exts <- ants_long %>% 
+  mutate(total_abundance = 1) %>% 
+  turnover(time.var = "year",
+           species.var = "code",
+           abundance.var = "total_abundance",
+           metric = "disappearance")
+
+
+ants_cols %>% 
+  left_join(ants_exts) %>% 
+  pivot_longer(cols = -year,
+               names_to = "metric",
+               values_to = "rate") %>%
+  ggplot(aes(x = year, y = rate)) +
+  geom_col(aes(fill = metric)) +
+  geom_point(data = ants_turnover, aes(y = total)) +
+  geom_line(data = ants_turnover, aes(y = total)) +
+  geom_vline(aes(xintercept = 2005), linetype = "dashed", color = "black") +
+  scale_fill_viridis_d(begin = .5) +
+  scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 1)) + 
+  ylim(0,1) + 
+  labs(title = "Community turnover relative to the preceding sample",
+       x = "Year",
+       y = "Turnover") +
+  theme(axis.text.x = element_text(angle = 30, vjust = 1, hjust = 1))
+
+
+
+
+
+ants_cols %>% 
+  left_join(ants_exts) %>% 
+  pivot_longer(cols = -year,
+               names_to = "metric",
+               values_to = "rate") %>%
+  ggplot(aes(x = year, y = rate)) +
+  geom_col(aes(fill = metric)) +
+  geom_point(data = ants_turnover, aes(y = total)) +
+  geom_line(data = ants_turnover, aes(y = total)) +
+  geom_vline(aes(xintercept = 2005), linetype = "dashed", color = "black") +
+  scale_fill_viridis_d(begin = .5) +
+  scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 1)) + 
+  ylim(0,1) + 
+  labs(title = "Community turnover relative to the preceding sample",
+       x = "Year",
+       y = "Turnover") +
+  theme(axis.text.x = element_text(angle = 30, vjust = 1, hjust = 1))
+
+
+#euler diagramas
+ants_long %>% 
+  filter(year %in% c(2004, 2008)) %>% # keep the years of interest
+  split(.$year) %>% # create a list with a dataframe per year
+  map(select, code) %>% # for each dataframe, select the code variable
+  map(unlist) %>% # create a vector from the selected variable
+  eulerr::euler() %>% # calculate the parameters for the euler diagram
+  plot(quantities = T)  # and plot it
+
+
+#esto podria ser una opcion, aunque es un poco lioso por los colores
+ggplot(ants_long, aes(x= year, fill= total_abundance, color= code))+
+  geom_bar()
+
+#The list of taxa that occur consistently through time for a set of samples constitutes the time core taxa. Are the overlapping species identified in the previous exercise time core species of the community?
+
+ants_long %>%  
+  group_by(genus, species) %>% 
+  summarise(n_year = n_distinct(year)) %>% 
+  filter(n_years == nrow(ants_wide))
+
+
