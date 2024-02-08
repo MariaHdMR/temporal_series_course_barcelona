@@ -1,0 +1,1390 @@
+---
+title: "Introduction to time series analyses"
+subtitle: "Session 6: Basic analyses for high frequency time series"
+output: 
+    html_document:
+      toc: true
+      toc_float: true
+      theme: paper
+      highlight: pygments
+      code_folding: show
+      df_print: paged
+author: 
+  - Anna Lupon ^[CEAB-CSIC, alupon@ceab.csic.es]
+  - Gerard Rocher-Ros ^[SLU, gerard.rocher.ros@slu.se]
+  - Lluís Gómez-Gener ^[CREAF, l.gomez@creaf.uab.cat]
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=html}
+<style type="text/css">
+
+body, td {
+   font-size: 20px;
+}
+code.r{
+  font-size: 16px;
+}
+pre {
+  font-size: 16px
+}
+body {
+text-align: justify}
+</style>
+```
+```{=html}
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  TeX: { equationNumbers: { autoNumber: "AMS" } }
+});
+</script>
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+# Introduction
+
+In this tutorial, we will cover some basic concepts about how to analyse
+time series obtained with environmental sensors. Briefly, what
+characterizes environmental sensors data from other time series
+(population, communities) is that they record data at **high-temporal
+resolution** (daily, hourly or minutes time intervals).
+
+In the previous session, we learned some techniques for data cleaning,
+including outliers detection and gap filling. In this session, we will
+learn **basic statistical analysis** for environmental sensor time
+series or any other high frequency time series. The main goal of these
+analyses is to extract information about your time series (patterns,
+relations), but not forecasting. The topics we will cover are:
+
+1.  Spectral analyses
+2.  Correlation-type analyses
+3.  Linear regression models
+
+# Before starting
+
+### Packages:
+
+```{r packages}
+# Data
+library(tidyverse)
+library(lubridate)
+
+# Plots
+library (ggplot2)
+library(lattice)
+library(viridis)
+library(ggpubr)
+library (RColorBrewer)
+
+# Analyses
+library(anomalize) # Decomposition
+library(stats) # Correlation, Cross-correlation
+library(corrplot) # Correlation
+library(biwavelet) # Wavelet
+library(imputeTS) # Imputation
+library(nlme) # Regressions
+library(lmtest) # Regressions
+```
+
+### Working directory:
+
+```{r working directory}
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+```
+
+### Data file:
+
+For most of the session, we will work with the file "vau_all_2019.csv",
+which contains data for several environmental sensors installed in a
+high mountain river in Switzerland.
+
+```{r data vau}
+
+dat = read.csv (file = "vau_all_2019_course.csv",
+                sep = ",",
+                skip = 1,
+                stringsAsFactors = F)
+
+## View data
+#View (dat)
+```
+
+Data from this file is already cleaned and ready to use. However,
+remember to check (and most probably convert) the date format every time
+you import a data set.
+
+```{r dates vau}
+# Convert columns cointaining dates to "date" format
+dat = dat %>% mutate (datetime = as.POSIXct(datetime, tz = "UTC",
+                                            format = c("%d/%m/%Y %H:%M"))) %>%
+              mutate (date = as.POSIXct(date, tz = "UTC",
+                                        format = c("%d/%m/%Y")))
+```
+
+# 1 Spectral Analyses
+
+Many ecological time series (and especially environmental, physiological
+or biogeochemical time series) show periodic behaviors. Understanding
+when and why these periodic behaviors occur is one of the main goals of
+ecology.
+
+## 1.1 Decomposition
+
+In the last session, we already leaned how to decompose a time series.
+Briefly, and as a reminder, **decomposition** is a mathematical
+procedure that disentangle the periodic behaviors from the general trend
+of a time series. Specifically, decomposition splits a time series into
+**3 component** **series**:
+
+-   **Trend:** The underlying trend of the metrics (increase, decrease)
+
+-   **Seasonal:** Periodic behavior (cycles).
+
+-   **Random:** Residuals of the original time series after the seasonal
+    and trend series are removed.
+
+In the last session, we used the function ***`time_decompose`*** of the
+*package `anomalize`* for detecting outliers or anomalies. We can also
+use this function for other proposes, such as for understanding our time
+series or for forecasting.
+
+**Example: Decomposition of water temperature during the period
+January-June 2017**
+
+```{r decomposition}
+
+## Data set
+dat_Jan17_Jun17 = dat %>%
+  # filter the period of interest
+  filter (datetime >= "2017-01-01 00:00" &
+          datetime <= "2017-06-30 00:00") 
+
+## Function decompose
+
+# decompose a time series (has to be in tibble format)
+decompose = time_decompose(
+  # choose dataframe containing the data and convert it to tibble
+  as.tibble(dat_Jan17_Jun17,
+            #what to do with na in the dataframe
+             na.action = na.pass),
+  # select varaible to decompose
+  water.temp)
+
+# plot time series
+p_ts = ggplot (decompose, aes(x = datetime, y = observed)) +
+  geom_line (col = "black") +
+  theme_classic() +
+  labs ( x = NULL,
+           y = "Water Temp (ºC)")
+
+# plot trend
+p_trend = ggplot (decompose, aes(x = datetime, y = trend)) +
+  geom_line (col = "#D55E00") + 
+  theme_classic() +
+  labs ( x = NULL,
+           y = "Trend")
+
+# plot season
+p_season = ggplot (decompose, aes(x = datetime, y = season)) +
+  geom_line (col = "#E69F00") +
+  theme_classic() +
+  labs ( x = NULL,
+           y = "Season")
+
+# plot remainder
+p_remainder = ggplot (decompose, aes(x = datetime, y = remainder)) +
+  geom_line (col = "#F0E442") +
+  theme_classic() +
+  labs ( x = "Period (month)",
+           y = "Remainder")
+
+# plot all together
+ggarrange (p_ts, p_trend, p_season, p_remainder, ncol = 1)
+
+
+```
+
+The graphs show the decomposition of the water temperature time series
+into trend (increase water temperatures from January to June), season
+(daily periodicity of water temperature) and remainder (residuals).
+
+However, the periodic behavior of time series can be very complex. For
+instance, some time series can have more than one periodic/seasonal
+behavior, or the seasonal behavior can be masked by the trend. For
+instance, think about the temporal pattern of carbon dioxide
+concentrations in the atmosphere. The figure on the left shows the
+carbon dioxide concentrations over 800,000 years based on ice-core data
+(source: NOAA). In this figure, we see a general trend over the 800,000
+years as well as seasonal pattern (cycle) every ca. 100,000 years, and
+even smaller periodic patterns over a few thousands years. The figure on
+the right shows the temporal pattern of carbon dioxide for the last 60
+years (source: NOAA). Here, we can see that there is also a periodic
+patterns for each year, and probably if we zoom into each year, we will
+also see daily cycles of carbon dioxide concentrations.
+
+![](ClimateDashboard_1400px_paleo-graph_20230829.png){width="319"}
+![](ClimateDashboard-atmospheric-carbon-dioxide-graph-20230825-1400px.png){width="318"}
+
+**Spectral analysis** is a technique that allows us to discover
+underlying periodicities. We will not explain the technical details of
+spectral analysis. If any of you is interested in the topic, the book of
+[Venables & Ripley
+(2002](https://link.springer.com/book/10.1007/978-0-387-21706-2)) is
+worth reading. There are many spectral analyses with different
+complexity. Here, we will only explain two of them that are commonly
+used in ecology.
+
+## 1.2 Power Spectral Density (PSD)
+
+The power spectrum of a time series describes the distribution of power
+into frequency components composing that signal. In other words, it
+decomposes the time series into a number of discrete frequencies based
+on the [Fourier
+analysis](https://en.wikipedia.org/wiki/Fourier_analysis "Fourier analysis")
+and then estimates the variance explained for each of them. The plot
+showing the power spectrum vs frequencies is called **periodogram**.
+
+The following figure shows a time series in red. The PSD estimates the
+amount of variance that is explained for each frequency (i.e., hourly,
+daily, weekly, monthly, annual, etc) and plot it in a periodogram (blue
+graph).
+
+![](FFT-Time-Frequency-View-540.png){width="549"}
+
+### **The function *spectrum***
+
+Function ***`spectrum`*** from package *`stats`* is the easiest function
+to calculate the Power Spectrum Density of a time series. As it is
+designed, this function plot the frequency vs power. However, in
+statistical ecology, we are more used to the terms "period" (i.e. the
+inverse of frequency: hour, day, week) and "variance" (i.e., 2 x
+power").
+
+**Example: Spectrum of water temperature during the period January-June
+2017**
+
+```{r spectrum}
+
+## Estimate the PSD
+# formula spectrum
+spectrum = spectrum(dat_Jan17_Jun17$water.temp,
+           # show values in log? No
+           log = "no",
+           # plot the results? No
+           plot = FALSE)
+
+## Dataset with the results
+psd = data.frame(spectrum$freq, spectrum$spec) %>% 
+  # rename frequency
+  rename (frequency = spectrum.freq) %>% 
+  # rename power
+  rename (power = spectrum.spec) %>% 
+  # new variable as period expressed in months
+  # we have 6 observations/hour * 24 hours/day * 30 days/month
+  mutate (period = (1/frequency)/(30*24*6)) %>%
+  # new variable as variance
+  mutate (variance = 2*power)
+
+## Plot
+p_spectrum = ggplot (psd, aes (x = period, y = variance)) +
+     geom_line(col ="orange", linewidth = 1.5) +
+     theme_classic() +
+     labs ( x = "Period (months)",
+           y = "Variance")
+
+## Plot time series + spectrum
+ggarrange (p_ts, p_spectrum, ncol = 1)
+```
+
+The periodogram shows that most of the variance of our time series is
+explained by a daily variations in water temperature (daily cycle or
+periodicity). Also, some part of the variance is explained by (1)
+bimonthly variations in water temperature and (2) 6-months variations in
+water temperature (i.e. increases in water temperature during the whole
+period).
+
+## 1.3 Wavelet Spectral Analysis
+
+A major disadvantage of PSD is that it **only works for stationary time
+series** (i.e., time series which statistical properties do not vary
+with time). However, several environmental and ecological time series
+are not stationary. Environmental disturbances can, for instance, shift
+both environmental and ecological time series.
+
+Another major disadvantage of PSD is that it **does not capture**
+**global frequency information**, meaning frequencies that persist over
+an entire time series. In other words, we cannot distinguish (1) how
+often a particular cycle occurs and (2) when a particular cycle occurs.
+For instance, the following figure shows two time series with quasi
+identical periodograms (Cazelles et al. 2008). This is because the two
+time series have the same periodic components and they explain the same
+proportion of the variance, but they are localized at different moments.
+
+![](Imagen2.png)
+
+An alternative approach is the **Wavelet Transform**, which decomposes a
+function into a set of wavelets (or waves). The basic idea is to compute
+**where** and **how much** of a wavelet with a specific scale is in a
+time series. In other words, we pick a wavelet of a particular scale and
+slide it over the whole period. Therefore, wavelets can extract the
+local spectral and temporal information simultaneously.
+
+![](WAVELET.gif){width="473"}
+
+### **The function *wt***
+
+Function ***`wt` ()*** from package *`biwavelet`* is very easy to use.
+To run it, time series must be a data frame object of two variables:
+time and observations. The function has **several optional specs** to
+choose: lag of the time step, number of scale, smallest and maximum
+scale, spacing between scales or modify the significance level. We will
+not go into detail in these *specs*, but if you choose to run these
+analyses for your own data, changing these *specs* can save you a lot of
+computational time.
+
+However, the function *`wt`* has two handicaps:
+
+1.  **"Time" must be a numeric variable.** You can do so using the
+    command "`as.numeric()`". Be aware that this function converts your
+    date to a number that equals the number of seconds since "1/1/1970
+    0:00:00". You can then convert this number to minutes, hours, days
+    or years by dividing the number by 60, 3600, 86400 or 31536000,
+    respectively. However, this number will always be zero intuitive.
+    Our recommendation is to convert your first datetime to "time zero"
+    and count the seconds/days/years from thereafter.
+
+2.  **To plot the graph, data must have no gaps.** There is several ways
+    to fix this and with different levels of complexity. The simplest
+    way to deal with gaps is to fill them with (1) a logic value via
+    imputation or (2) an unreasonable value. If you choose the second
+    option, later you can manually change the cells of the plot for a
+    blank. A third option is to run the analyses and manually plot the
+    results.
+
+**Example: Wavelet of water temperature during the period January-June
+2017**
+
+```{r wavelet}
+## Data selection
+water_temp = dat_Jan17_Jun17 %>%
+  # convert datetime to a numeric variable
+  # to make it more intuitive, we will express time as days,
+  # and make time 0 = 2016-10-01 00:00
+  mutate (time.days = (as.numeric(datetime) - 1483225200)/(24*60*60)) %>%
+  # select the variables of interest (time and water.temp)
+  select (time.days, water.temp)
+
+## Function
+wavelet = biwavelet::wt(water_temp) 
+
+## Plot
+# preliminary graph properties (optional)
+par(oma = c(0, 0, 0, 1), mar = c(5, 4, 4, 5) + 0.1)
+#plot
+plot(wavelet, plot.cb = TRUE, plot.phase = FALSE)
+
+```
+
+**Plot interpretation**:
+
+-   Time (in days) is displayed on the horizontal axis, while the
+    vertical axis shows the period or scale (also in days).
+
+-   Warmer colors (red) represent regions with significant periodicity
+    or cycles, while colder colors (blue) signify regions with low
+    periodicity. For instance, there is a clearly periodicity at daily
+    scale, but only during March-June. Also, there is some punctual
+    periodicity at weekly scale.
+
+-   Regions beyond the significant areas (Cone of Influence or COI)
+    represent time and scales with no dependence in the series.
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### TASK
+
+**Compare the results obtained from the three spectral analyses
+(decomposition, power spectrum density and wavelet) for water
+temperature during the period Oct 2016 - Sept 2019 (both included). What
+is each analysis telling us?**
+:::
+
+------------------------------------------------------------------------
+
+```{r task temp 2016-2019}
+## Data set
+dat_OCt16_Sep19 = dat %>%
+  # filter the period of interest
+  filter (datetime >= "2016-10-01 00:00" &
+          datetime <= "2019-09-30 00:00") 
+
+##                             DECOMPOSITION
+
+# decompose a time series (has to be in tibble format)
+decompose_1 = time_decompose(
+  # choose dataframe containing the data and convert it to tibble
+  as.tibble(dat_OCt16_Sep19,
+            #what to do with na in the dataframe
+             na.action = na.pass),
+  # select varaible to decompose
+  water.temp)
+
+# plot time series
+p_ts_1 = ggplot (decompose_1, aes(x = datetime, y = observed)) +
+  geom_line (col = "black") +
+  theme_classic() +
+  labs ( x = NULL,
+           y = "Water Temp (ºC)")
+
+# plot trend
+p_trend_1 = ggplot (decompose_1, aes(x = datetime, y = trend)) +
+  geom_line (col = "#D55E00") + 
+  theme_classic() +
+  labs ( x = NULL,
+           y = "Trend")
+
+# plot season
+p_season_1 = ggplot (decompose_1, aes(x = datetime, y = season)) +
+  geom_line (col = "#E69F00") +
+  theme_classic() +
+  labs ( x = NULL,
+           y = "Season")
+
+# plot remainder
+p_remainder_1 = ggplot (decompose_1, aes(x = datetime, y = remainder)) +
+  geom_line (col = "#F0E442") +
+  theme_classic() +
+  labs ( x = "Period (month)",
+           y = "Remainder")
+
+# plot all together
+ggarrange (p_ts_1, p_trend_1, p_season_1, p_remainder_1, ncol = 1)
+
+#######             power spectrum density        
+
+
+## Estimate the PSD
+# formula spectrum
+spectrum_1 = spectrum(dat_OCt16_Sep19$water.temp,
+           # show values in log? No
+           log = "no",
+           # plot the results? No
+           plot = FALSE)
+
+## Dataset with the results
+psd_1 = data.frame(spectrum_1$freq, spectrum_1$spec) %>% 
+  # rename frequency
+  rename (frequency = spectrum.freq) %>% 
+  # rename power
+  rename (power = spectrum.spec) %>% 
+  # new variable as period expressed in months
+  # we have 6 observations/hour * 24 hours/day * 30 days/month
+  mutate (period = (1/frequency)/(30*24*6)) %>%
+  # new variable as variance
+  mutate (variance = 2*power)
+
+## Plot
+p_spectrum = ggplot (psd, aes (x = period, y = variance)) +
+     geom_line(col ="orange", linewidth = 1.5) +
+     theme_classic() +
+     labs ( x = "Period (months)",
+           y = "Variance")
+
+## Plot time series + spectrum
+ggarrange (p_ts, p_spectrum, ncol = 1)
+
+
+```
+```{r wavelet}
+## Data selection
+water_temp_1 = dat_OCt16_Sep19 %>%
+  # convert datetime to a numeric variable
+  # to make it more intuitive, we will express time as days,
+  # and make time 0 = 2016-10-01 00:00
+  mutate (time.days = (as.numeric(datetime) - 1483225200)/(24*60*60*30)) %>% # el numero estte largo sale de que escoges el primer numero que sale d time.days de datetime
+  # select the variables of interest (time and water.temp)
+  select (time.days, water.temp)
+
+## Function
+wavelet_1 = biwavelet::wt(water_temp_1) 
+
+## Plot
+# preliminary graph properties (optional)
+par(oma = c(0, 0, 0, 1), mar = c(5, 4, 4, 5) + 0.1)
+#plot
+plot(wavelet_1, plot.cb = TRUE, plot.phase = FALSE)
+
+
+
+
+
+
+
+
+
+
+```
+------------------------------------------------------------------------
+
+::: {align="center"}
+### TASK
+
+**Compare the results obtained from the three spectral analyses
+(decomposition, power spectrum density and wavelet) for water turbidity
+during the period January 2017 - June 2017 (both included). What is each
+analysis telling us?**
+:::
+
+
+------------------------------------------------------------------------
+
+```{r task turb 2017}
+
+```
+
+# 2 Correlation Analyses
+
+**Correlation type analyses** aim to establish whether there is a
+relationship, whether causal or not, between two or more variables. Some
+correlation-type analyses are very simple, and some of them are very
+complex. Here, we will learn some of the most common (and interesting)
+correlation type analyses used for high frequency time series.
+
+For this section, we will focus on the growing season of 2019 (from 15
+May 2019 to 15 September 2019). Basically, we will focus on this time
+period because, as you will see, some analyses require high
+computational power (and we do not want to spend the whole session
+waiting for our laptops to run one single analysis).
+
+```{r data 2019}
+dat_2019 = dat %>%
+  # filter data
+  filter (datetime >= "2019-05-15 00:00" & 
+          datetime <= "2019-09-15 00:00") 
+```
+
+## 2.1 Correlation
+
+A **correlation** is any statistical relationship, whether causal or
+not, between two variables. For time series, correlation is a **measure
+of similarity** and it is useful to know if they are in-phase or not.
+
+**Interpretation:** The strength of the relationship between two
+variables is measured by the **correlation coefficient (r).** This
+coefficient ranges from -1 to 1. Values close to 1 indicate that the two
+variables are strongly positive related, while values close to -1
+indicate a strong negative relation between the variables. For time
+series, we usually say that the two **time series are in-phase** (values
+close to 1) or **in anti-phase** (values close to -1). Values close to 0
+indicate that the two time series are not related.
+
+### The functions *cor.test* and *cor*
+
+One of the most popular functions for correlations is ***`cor.test`***
+(package *`stats`*). For applying this function, you only need to
+specify the two time series you want to correlate and the correlation
+method. Most popular correlation methods are Pearson (linear
+relationships) and Spearman (based on ranks, useful for non-linear
+relationships).
+
+**Example: Correlation of daily ranges in dissolved oxygen with light
+and temperature during the growing season 2019**
+
+The daily range in dissolved oxygen concentrations is a good proxy of
+photosynthetic activity. Here we will explore how it co-varies with
+temperatures and light (in theory, two important drivers of gross
+primary production).
+
+```{r correlation}
+
+## Data preapration
+dat_daily_2019 = dat_2019 %>% 
+  #perform multiple summary variables, we are interested in:
+  # mean daily temperature, mean daily light and daily range of O2 concentration
+  summarise(air.temp.mean = mean(air.temp, na.rm= TRUE),
+            air.light.mean = mean(air.light, na.rm= TRUE),
+            water.O2.range = max(water.O2, na.rm= TRUE)- min(water.O2, na.rm= TRUE),
+            #we transform the time series from a 10-min frequency to daily here
+            .by= "date")
+
+## Function correlation between temperature and O2 range
+cor.test(
+  #specify the two variables to correlate
+  dat_daily_2019$air.temp.mean, dat_daily_2019$water.O2.range,
+  # correlation methods (pearson, spearman, kendall)
+  method = c("pearson"),
+  # set confidence interval
+  conf.level = 0.95)
+
+## Function correlation between light and O2 range
+cor.test(
+  dat_daily_2019$air.light.mean, dat_daily_2019$water.O2.range,
+  method = c("pearson"),
+  conf.level = 0.95)
+
+## Plot correlation light vs O2 range
+dat_daily_2019 %>% 
+  ggplot(aes(air.light.mean,water.O2.range)) +
+  # black points graph
+  geom_point() +     
+  # add correlation with errors and blue color
+  stat_smooth(method = 'lm', 
+              method.args = list(start= c(a = 1,b=1)),
+              se=T, color = "blue") +
+  # theme
+  theme_classic() +
+  # add labels
+  labs( x = "Air Light (lux)",
+        y = expression("Range in"~O[2]~(mg~L^-1)))
+
+# we can do a better graph by adding temperature
+dat_daily_2019 %>% 
+  # temperature as color
+  ggplot(aes(air.light.mean,water.O2.range, color= air.temp.mean))+
+  # black points graph
+  geom_point()+
+  # palette for temperature
+  scale_color_viridis_c()+
+# add correlation btw light and O2 range with errors and blue color
+  stat_smooth(method = 'lm', 
+              method.args = list(start= c(a = 1,b=1)),
+              se=T, color = "blue") +
+  # theme
+  theme_classic()
+```
+
+We can also perform all the possible pairs of correlations at once with
+the function *`cor`* (package *`corrplot`*) and plot the results with
+pretty cool graphs. The only two handicaps of this function are (1)
+input data must be numeric variables, (2) input data must not have gaps.
+
+**Example: Correlation matrix for all the environmental and
+biogeochemical variables for the growing season 2019**
+
+```{r correlation matrix}
+## create dataframe with all the environemntal variables (no date formats)
+env_var = dat_2019 %>% 
+  #select variables
+  select (air.temp:water.depth)
+
+## calculate the correlation matrix
+cor = cor(na.omit(env_var),
+          method = c("pearson"))
+
+## plot the results
+corrplot(cor, 
+         # how we want the results (as number, circles, squares)
+         # circles and squares are fancier, but numbers are more useful
+         method = "number",
+         # what matrix we want (full, upper, lower)
+         type="upper",
+         #we remove the diagonal as it is always 1
+         diag= FALSE,
+         # how we want the data ordered
+         order="alphabet",
+         # how we want to color the matrix
+         col=brewer.pal(n=8, name="RdYlBu"))
+
+```
+
+## 2.2 Cross Correlation
+
+A major disadvantage of correlations is that they can't detect if there
+is a displacement (or lag time) between two time series.
+**Cross-correlation** is a measure of similarity of two time series as a
+function of the displacement of one relative to the other. It is used to
+compare two time series and objectively determine how well they match up
+with each other and, in particular, **at what point the best match
+occurs**.
+
+**Interpretation:**
+
+-   **Correlation coefficient (r)**: ranges from -1 to 1. Values close
+    to 1 indicate that the two time series are in-phase. Values close to
+    -1 indicate that the two time series are in anti-phase. Values close
+    to 0 indicate that the two time series are not related.
+
+-   **Lag time with the highest correlation coefficient**: indicates the
+    displacement between the two time series. Positive lag times
+    indicate that the second time series leads the signal, while
+    negative lag times indicate that the first time series leads the
+    signal.
+
+![](CrossCorrelation.gif)
+
+The animation shows how cross-correlation is calculated. The left graph
+shows a green time series G that is phase-shifted relative to time
+series F by a time displacement of 𝜏. The middle graph shows the
+function F and the phase-shifted G represented together as a Lissajous
+curve. Integrating F multiplied by the phase-shifted G produces the
+right graph, the cross-correlation across all values of 𝜏.
+
+### The function *ccf*
+
+The most common and easiest function to use for cross-correlation is
+***`ccf`*** (package *`stats`*). Data input must be two numerical
+vectors. Remember to add "na.action = na.pass" if you have NA values in
+your time series. If you don't want the plot, you must use the command
+"plot ="FALSE"".
+
+**Example: Cross correlation between air and water temperature during
+the growing season 2019**
+
+```{r cross correlation}
+
+ccf (dat_2019$air.temp, dat_2019$water.temp,
+     #indicate what to do with "NA".
+     na.action = na.pass,
+     #indicate if you want the plot
+     plot = "TRUE")
+
+```
+
+**Plot interpretation:**
+
+-   Lag times are displayed on the horizontal axis. Negative values
+    indicate that the first variable (x) leads, while positive values
+    indicate that the second variable (y) leads.
+
+-   The vertical axis shows the correlation coefficient between the two
+    time series at a particular lag time. Positive values indicate that
+    the two time series are in-phase and negative values that they are
+    in anti-phase.
+
+-   Horizontal blue lines show the significance. Correlation
+    coefficients between the two blue bars are NOT significant.
+
+In our example, the two time series (air and water temperature) are
+positive correlated for all lag times, but the maximum correlation
+occurs around lag time -2. This means that (1) the two time series are
+in-phase and (2) the first variable (air temperature) leads the signal.
+
+However, finding the lag time with the highest correlation coefficient
+can be tedious. To make your life easier, you can build a function that
+directly detect the highest correlation coefficient (in absolute terms)
+and the lag time when it occurs.
+
+```{r formula cross correlation}
+Find_Max_CCF = function(x,y) {
+ # run cross-correlation function
+ ccf = ccf(x, y, plot = FALSE, na.action = na.pass) 
+ # build a dataset with lag times and correlation coefficients
+ res_cc = data.frame(lag = ccf$lag[,,1], cor = ccf$acf[,,1]) 
+ max = res_cc[which.max(abs(res_cc$cor)),] 
+ # return only the data of interest
+ return(max) 
+} 
+
+Find_Max_CCF (dat_2019$air.temp, dat_2019$water.temp)
+
+```
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### TASK
+
+**Correlate water temperature with\
+(1) oxygen and (2) carbon dioxide concentrations in the water.\
+Are they correlated? Positively or negatively? At which lag time?**
+:::
+
+------------------------------------------------------------------------
+
+```{r task cross corerlation}
+
+```
+
+## 2.3 Wavelet Coherence Analysis
+
+Cross-correlations are useful, but have some disadvantages. Two of them
+are:
+
+-   They can only detect similarities at the frequency of measure (in
+    our case, hours), but not at different frequencies.
+
+-   They cannot detect localized similarities over time.
+
+The **wavelet coherence** **analysis** is defined as **the localized
+correlation coefficient between two time series in a time-frequency
+space**. The basic idea is that they tell you when two time series are
+correlated and at what frequency it happens (i.e., hourly, daily,
+monthly, etc).
+
+### **The function *wtc***
+
+Function ***`wtc`*** () from package *`biwavelet`* is pretty
+straightforward. Data inputs must be two time series (one for each
+variable) containing two columns: "datetime" and "variable of interest".
+Despite you can run a simple wavelet with a few commands, it is
+important to remember that *`wtc`* has **several optional specs** to
+choose: lag of the time step, number of scale, smallest and maximum
+scale, spacing between scales, number of monte carlo, or modify the
+significance level.
+
+However, this function is not perfect. In particular, it has three
+problems that are more or less easy to fix depending on your data set:
+
+1.  **"Datetime" must be a numeric variable.** You can do so using the
+    command "`as.numeric()`". Be aware that this function converts your
+    date to a number that equals the number of seconds since "1/1/1970
+    0:00:00". You can then convert this number to minutes, hours, days
+    or years by dividing the number by 60, 3600, 86400 or 31536000,
+    respectively. However, this number will always be zero intuitive.
+    Our recommendation is to convert your first datetime to "time zero"
+    and count the seconds/days/years from thereafter.
+
+2.  **Both time series must be recorded at the same frequency.** This
+    might or might not happen. You can aggregate or imputate your data
+    to lower/higher frequency to match both time series (we recommend to
+    aggregate, but it depends on each case).
+
+3.  **To plot the graph, data must have no gaps.** There is several ways
+    to fix this and with different levels of complexity. The simplest
+    way to deal with gaps is to fill them with (1) a logic value via
+    imputation or (2) an unreasonable value. If you choose the second
+    option, later you can manually change the cells of the plot for a
+    blank. A third option is to run the analyses and manually plot the
+    results.
+
+**Example: Wavelet between air and water temperature for the growing
+season 2019**
+
+```{r biwavelet}
+
+#data selection
+air.temp = dat_2019 %>% 
+           # select data at hourly intervals by
+           # create a new variable named "minutes"
+           mutate (minutes = minute (datetime)) %>% # Add variable minutes
+           # filter "oclock data"
+           filter (minutes == "0") %>% # Filter hourly data
+           # convert datetime to a numeric variable
+           # to make it more intuitive, we will express time as days,
+           # and make time 0 = 2019-05-15 00:00 
+           mutate (time.days = (as.numeric(datetime)- 1557871200)/(60*60*24)) %>%
+           # select the variables of interest (time and air.temp)
+           select (time.days, air.temp) %>%
+           # fill the 12 NA data from the beginning with 20ºC
+           replace_na (list(air.temp = 20))# Convert NA to value = 100 
+
+water.temp = dat_2019 %>% 
+           # select data at hourly intervals by
+           # create a new variable named "minutes"
+           mutate (minutes = minute (datetime)) %>% # Add variable minutes
+           # filter "oclock data"
+           filter (minutes == "0") %>% # Filter hourly data
+           # convert datetime to a numeric variable
+           # to make it more intuitive, we will express time as days,
+           # and make time 0 = 2019-05-15 00:00 
+           mutate (time.days = (as.numeric(datetime)- 1557871200)/(60*60*24)) %>%
+           # select the variables of interest (time and air.temp)
+           select (time.days, water.temp)
+
+# wavelet analysis (this will take a while)
+wavelet = wtc(air.temp, water.temp,
+              #display the progress bar
+              quiet = TRUE)
+
+# wavelet plot
+par(oma = c(0, 0, 0, 1), mar = c(5, 4, 4, 5) + 0.1)
+plot(wavelet,
+     #legend colors
+     plot.cb = TRUE,
+     #lag phase (lines)
+     plot.phase = TRUE, 
+     ylab = "Frequency (days)",
+     xlab = "Time (days)") 
+  
+```
+
+**Plot Interpretation**:
+
+-   Time is displayed on the horizontal axis, while the vertical axis
+    shows the frequency (the lower the frequency, the higher the scale).
+    In our case, the horizontal axis are days since the beginning of the
+    growing season 2019 (15/05/2019 0:00), while the vertical axis shows
+    the frequency in days (1 = daily scale, 0.04 = hourly, 16 =
+    biweekly).
+
+-   Warmer colors (red) represent regions with significant
+    interrelation, while colder colors (blue) signify lower dependence
+    between the series. Cold regions beyond the significant areas
+    represent time and frequencies with no dependence in the series.
+
+-   An arrow in the wavelet coherence plots represents the lead variable
+    and lag phase relations between the examined series. Arrows pointing
+    right indicate the two series are in phase, which means they move in
+    the same direction and lag time equals 0. Arrows poiting left
+    indicate the two series are in anti-phase, which means they move in
+    the opposite direction and lag time equals 0. Arrows pointing to the
+    down indicate the x-variable is leading, while arrows pointing up
+    indicate the y-variable is leading.
+
+    ![](arrows_wavelet.png){width="510"}
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### TASK
+
+**Plot and interpret the wavelet coherence analysis between water
+temperature\
+and stream concentrations of (1) O2 and (2) CO2 for the period
+comprised\
+between 15/05/2019 and 15/09/2019. What are they telling us?**
+:::
+
+------------------------------------------------------------------------
+
+```{r task biwavelet}
+
+
+```
+
+## 2.4 Correlating more than two time series
+
+All the former analyses were exploring the correlation and
+interrelations between two time series. But, what happens if we have
+more than two time series? The typical example for this is when you have
+the same sensor (for example, temperature) in several locations (for
+example, along a river network, in different forest plots, etc) and you
+want to know if they behave similarly or not over time. When we analyze
+the correlation among several time series, we usually talk about
+**synchrony.**
+
+For analyzing synchrony, we will use a new data set that contains high
+frequency data for sensors that measured soil water content (SWC) and
+soil temperature (ST) in four different riparian sites located in the
+same watershed.
+
+```{r data soils}
+dat_soils = read.csv (file = "SoilData.csv",
+                sep = ",",
+                skip = 0,
+                stringsAsFactors = F)
+```
+
+### Functions for synchrony
+
+Several functions and R packages can be use to assess the synchrony
+among multiple time series. From all functions presented today, both
+correlations and wavelets analyses are useful. Since wavelets needs a
+large computational time (and we don't have much time), we will focus on
+correlations among several time series.
+
+For the correlation method, synchrony is measured by calculating the
+correlation coefficient among all possible pairs of time series. The
+synchrony equals to the mean value of all correlation coefficients.
+
+**Example: Weekly synchony among all SWC sensors**
+
+```{r synchrony}
+
+cor_SWC = dat_soils %>%
+          # transform datetime to posixct data
+          mutate (datetime = as.POSIXct(datetime,
+                                    tz = "UTC", format = c("%d/%m/%Y %H:%M"))) %>%
+          # add variable week
+          mutate (week = week(datetime)) %>%
+          # select variables week + SWC
+          select (week, SWC1:SWC4) %>%
+          # group data by week
+          group_by(week) %>%
+          # for each week, calculate the correlation coefficient
+          #between all possible pairs of sensors
+          # this code is to visualize the steps using the same functions as above
+          # if you have several sensors, it will save time to create a loop
+          summarize(
+            cor_s1_s2 = cor(SWC1, SWC2),
+            cor_s1_s3 = cor(SWC1, SWC3),
+            cor_s1_s4 = cor(SWC1, SWC4),
+            cor_s2_s3 = cor(SWC2, SWC3),
+            cor_s2_s4 = cor(SWC2, SWC4),
+            cor_s3_s4 = cor(SWC3, SWC4)
+            ) %>%
+          # calculate the mean correlation coefficient
+          mutate (mean_cor_SWC = rowMeans(select(., starts_with("cor_s")))) %>%
+          # select week and mean correlation coefficient
+          select (week, mean_cor_SWC)
+
+cor_SWC
+
+```
+
+**Interpretation and problems:**
+
+-   **Interpretation:** it s the same as for "simple" correlation
+    coefficients. Mean correlation coefficient (r): it ranges from -1 to
+    1.
+-   **Problems:** be aware that if the multiple time series you want to
+    correlate are very different , or if some are in phase and others
+    are anti-phase, the result might be quite messy, because positive
+    and negative correlation coefficients will cancel each other. A nice
+    alternative for these cases is to use the **Kuramato index** (for
+    more information, go to section *interesting resources*).
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### TASK
+
+**Calculate the synchrony among the soil temperature sensors.\
+Do all weeks have the same sychrony?\
+Do weeks with the highest synchrony in TS have the highest synchrony in
+SWC as well?**
+:::
+
+------------------------------------------------------------------------
+
+```{r task synchrony}
+
+```
+
+# 3 Regression models
+
+**Regression models** (either linear or non-linear; univariate or
+multivariate) are commonly used to test if there is a relation among
+time series, to understand which variables better explain an observed
+time series, or to predict how a particular time series will change over
+time.
+
+The main problem with regression models with two time series is that
+they often show **temporal autocorrelation**. This was discussed in
+Session 2, but we will have a refresher. When doing a linear regression
+models, there are four assumptions:
+
+1.  The average of the residuals is 0.
+
+2.  The variance of the residuals is constant.
+
+3.  The residuals are normally distributed
+
+4.  The residuals are independent of each other.
+
+**Temporal autocorrelation** essentially means that points closer in
+time on average are going to be more similar than distant points. This
+violates assumption four, so we need to make sure there is temporal
+autocorrelation and then deal with it in our regression model.
+
+A simple and effective way to check if there is temporal autocorrelation
+in a series is by looking at the residuals of a simple linear model of
+two variables
+
+**Example: Linear regression of daily ranges in dissolved oxygen with
+light during the growing season 2019**
+
+```{r regression}
+
+# plot model
+ggplot (dat_daily_2019, aes(x=air.light.mean, y=water.O2.range)) +
+  geom_point (size =3) +
+  #geom_smooth (method = "lm")+
+  theme_classic() +
+     labs( x = "Mean daily light",
+           y = "Water O2 range")
+
+## Linear model
+mod = lm (water.O2.range ~ air.light.mean, data = dat_daily_2019)
+# summary of the model
+summary(mod)
+#check temporal autocorrelation of the residuals
+acf(mod$residuals)
+
+```
+
+It seems like, especially in the first lags (\<10), there is substantial
+autocorrelation. While this is a visual way to check whether
+autocorrelation exists, we can also run a statistical test developed for
+this purpose, the **Durbin-Watson test**. The Durbin-Watson test will
+test two hypothesis. The null hypothesis (H0) is that there is no
+autocorrelation with lag 1. If the alternative hypothesis turns out true
+then we have autocorrelation in this regression model and we need to
+correct for it. In case you want more details about this test, as well
+as how to interpret it manually using tables, this is a good
+[reference](https://www3.nd.edu/~wevans1/econ30331/Durbin_Watson_tables.pdf)
+
+```{r DurbinWatson}
+
+dwtest(mod)
+
+```
+
+There are several ways to deal with autocorrelation, and choosing a
+simpler or more complex method usually depends on the ultimately goal of
+your regression model. The most common methods are:
+
+-   **Generalized Least Squares (GLS) Models:** GLS is an extension of
+    ordinary least squares (OLS) that allows for the modeling of the
+    correlation structure in the residuals. It can be used when there is
+    a known covariance structure among the residuals. Despite they are
+    not as powerful as other models, they are much easier to use, and
+    are more than "good enough" if you use multiple regressions for
+    exploratory proposes (not for forecasting).
+
+-   **Residual Transformation:** Transform the dependent variable or the
+    residuals using techniques such as differencing or detrending.
+    Differencing can help make the residuals more stationary and reduce
+    autocorrelation. In Session 4, we already show some useful functions
+    to decompose your time series that also allow differencing and
+    detrending.
+
+-   **Autoregressive Integrated Moving Average (ARIMA) Models:** ARIMA
+    models combine autoregressive and moving average components with
+    differencing. They are powerful tools for modeling and forecasting
+    time series data. Also, they can be pretty complex. While we will
+    not cover ARIMA models today, there is a lot of useful books and
+    websites for learning them (see the interesting reference section
+    for some of these useful resources).
+
+## 3.1 Autocorrelation with GLS
+
+We can do a whole course of regression models, but for today we will
+keep it as simpler as possible; especially because `gls` can save your
+ass in more than one occasion. GLS is an "advance" version of OLS. The
+main difference between GLS and OLS is that GLS does not assume that the
+error terms of the regression model are identically distributed or have
+a constant variance. Instead, GLS allows for heteroscedasticity (unequal
+variance) and autocorrelation (correlation among error terms) in the
+error structure. In other words, **GLS models** can deal with
+auto-correlated residuals. Be aware that this does not mean that the
+residuals structure will change (autocorrelation will keep existing),
+but the model will take it into account for the estimates; so the
+coefficients of the different variables will change.
+
+There are several **correlation structures** available for GLS. Some of
+the most commonly used are:
+
+|           |                                                                                                                    |
+|------------------------|------------------------------------------------|
+| `corAR1`  | autoregressive process of order 1.                                                                                 |
+| `corARMA` | autoregressive moving average process, with arbitrary orders for the autoregressive and moving average components. |
+| `corCAR1` | continuous autoregressive process (AR(1) process for a continuous time covariate).                                 |
+
+**Example: Linear regression of daily ranges in dissolved oxygen with
+light during the growing season 2019**
+
+```{r gls}
+
+## Linear regression model without taking into account autocorrelation
+mod_lm = gls(water.O2.range ~ air.light.mean,
+             data = dat_daily_2019,
+             na.action = na.omit)
+# summary of the model
+summary(mod_lm)
+# plot residuals
+plot(mod_lm)
+qqnorm(mod_lm, abline = c(0,1))
+# check autocorrelation
+acf(mod_lm$residuals)
+
+
+## GLS taking into account autocorrelation
+mod_gls = gls(water.O2.range ~ air.light.mean,
+              data = dat_daily_2019,
+              na.action = na.omit,
+          # continuous autoregressive process for a continuous time covariate
+          correlation = corAR1(form = ~date))
+# summary of the model
+summary(mod_gls)
+# plot residuals
+plot(mod_gls)
+qqnorm(mod_gls, abline = c(0,1))
+# check autocorrelation
+acf(mod_gls$residuals)
+
+## Comparison of the models
+# Comparison of fit (AIC)
+anova (mod_lm, mod_gls)
+
+# Comparison of the coefficient of both models
+coef_lm = c(mod_lm$coefficients[1], mod_lm$coefficients[2])
+coef_gls = c(mod_gls$coefficients[1], mod_gls$coefficients[2])
+compare_coefficients = data.frame(coef_lm, coef_gls)
+compare_coefficients
+```
+
+## 3.2. Autocorrelation by transforming residuals
+
+An alternative approach for relatively simple models is to use the first
+order autocorrelation method proposed by **Cochran and Orcutt.** They
+suggest that after estimating the first order autocorrelation parameter
+(ρ), the response and predictors are adjusted by subtracting the
+previous value multiplied by ρ from the values and use these adjusted
+values in a regular regression. While this method is easy to implement,
+it is only valid for stationary time series that have a first order
+auto-regressive structure.
+
+**Example: Linear regression of daily ranges in dissolved oxygen with
+light during the growing season 2019**
+
+```{r}
+
+library(orcutt)
+
+## Cochrane Orcutt model
+# model
+mod_CO = cochrane.orcutt(mod)
+# summary
+summary(mod_CO)
+#autoregression
+acf(mod_CO$residuals)
+```
+
+After applying the Cochrane Orcutt correction, we still have
+autocorrelation in the residuals. This is probably because we have
+autocorrelation at lags \> 1. In these cases, we have to apply the
+correction until we do not see auto-correlation in the residuals.
+
+```{r}
+# model
+mod_CO2 = cochrane.orcutt(mod_CO)
+# summary
+summary(mod_CO2)
+#autoregression
+acf(mod_CO2$residuals)
+```
+
+Now, we can compare the coefficient of the three models
+
+```{r}
+
+## compare coeficients with the other models
+coef_CO2 = c(mod_CO2$coefficients[1], mod_CO2$coefficients[2])
+compare_coefficients = data.frame(coef_lm, coef_gls, coef_CO2)
+compare_coefficients 
+```
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### TASK: **Build a linear regression model for daily ranges of oxygen concentrations based on both mean daily light and mean daily air temperature.**
+:::
+
+------------------------------------------------------------------------
+
+# Final Exercise
+
+The main data set for this exercise is "Medes_Temp". This file has data
+on water temperature for different days for the period 1980-2022.
+
+```{r data medes temp}
+medes_temp = read.csv (file = "Medes_Temp.csv",
+                sep = ",",
+                skip = 0,
+                stringsAsFactors = F)
+
+```
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### TASK 1: **Changes in sea water temperature during the last 40 years**
+
+**Which analysis will you perform?\
+Run them to answer the question**
+:::
+
+------------------------------------------------------------------------
+
+```{r task medes temp}
+
+```
+
+We have observed an increase in sea water temperature during the past 40
+years. We also know that changes in temperatures might affect some
+species. For instance, violescent sea-whip ([*Paramuricea
+clavata*](https://en.wikipedia.org/wiki/Paramuricea_clavata)*)* start
+dying at high temperatures (\>22-25ºC). Therefore this species is
+especially sensitive to summer heat waves (i.e. temperatures that are
+extremely high even for the season).
+
+In the file "Medes_Biomass", there is data on violescent sea-whip
+biomass at five sites around Medes islands for the period 2016-2023.
+This data was collected between June and August as part of a monitoring
+program.
+
+IMPORTANT: This data is part of two PhD Thesis. Graciel·la Rovira and
+Yanis Zentner kindly shared these files for the course, but this data is
+still not fully published. Please, do not use it or share it without
+their permission.
+
+```{r data medes biomass}
+
+medes_biomass= read.csv (file = "Medes_Biomass.csv",
+                sep = ",",
+                skip = 0,
+                stringsAsFactors = F)
+```
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### TASK 2: **Effect of water temperature on violescent sea-whip biomass**
+
+Which analysis will you perform?\
+Run them to answer the question
+:::
+
+------------------------------------------------------------------------
+
+```{r task temp seawhip}
+```
+
+# Interesting references
+
+### General references
+
+-   Dettling, M. *Time Series Analysis: ETH Course*
+    [Website](https://www.dropbox.com/s/m4ryp8qcchoukg4/Time%20Series%20Analysis_ETH_COURSE.pdf?dl=0).
+
+-   Coghlan, a. *A Little Book of R For Time Series*
+    [Website](https://buildmedia.readthedocs.org/media/pdf/a-little-book-of-r-for-time-series/latest/a-little-book-of-r-for-time-series.pdf).
+
+### Spectral analyses
+
+-   Gouhier, T. et al., 2021 *Package 'biwavelet'*
+    [Website](https://cran.r-project.org/web/packages/biwavelet/biwavelet.pdf)
+
+-   Cazellas, B. et al., 2008 *Wavelet analysis of ecological time
+    series*
+    [DOI](https://link.springer.com/article/10.1007/s00442-008-0993-2).
+
+-   Riml, J. et al. 2019. *Spectral decomposition reveals new
+    perspectives on CO2 concentration patterns and sol-stream linkages*
+    [DOI](https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2018JG004981)
+
+### Correlations
+
+-   Gouhier, T. et al., 2021 *Package 'biwavelet'*
+    [Website](https://cran.r-project.org/web/packages/biwavelet/biwavelet.pdf)
+
+-   Cazellas, B. et al., 2008 *Wavelet analysis of ecological time*
+    *series*
+    [DOI](https://link.springer.com/article/10.1007/s00442-008-0993-2).
+
+-   Diamond, J. et al. 2022. *Light and hydrologic connectivity drive
+    dissolved oxygen synchrony in stream networks*
+    [DOI](https://aslopubs.onlinelibrary.wiley.com/doi/abs/10.1002/lno.12271){.uri},
+    [GitHub](https://github.com/jakediamond){.uri}
+
+### Regressions
+
+-   Fox, J. & Weisberg, S. 2018. *Time-Series regression and Generalized
+    Least Squares in R*
+    [Website](https://socialsciences.mcmaster.ca/jfox/Books/Companion/appendices/Appendix-Timeseries-Regression.pdf){.uri}
+
+-   Hyndman, R. and Athanasopoulos, G. *Forecasting: principles and
+    practice* ([Website](https://otexts.com/fpp2/arima-r.html){.uri}).
+
+-   Kjan, R. 2017. *ARIMA model for forecasting-Example in R*
+    [Website](https://rpubs.com/riazakhan94/arima_with_example){.uri}
+
+# Session info
+
+For ease of reproducibility
