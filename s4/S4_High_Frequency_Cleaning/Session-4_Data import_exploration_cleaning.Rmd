@@ -813,7 +813,7 @@ R will find the files or/and store the outputs). This path MUST
 correspond to the path where your data is stored:
 
 ```{r set working directory.exercise}
-setwd("C:/Users/lgomez/Mi unidad/Teaching and research GENERAL/00_Teaching/Introduction to time series analysis in Ecology (SIBECOL)/Time series 2024 (SIBECOL)/Sessions")
+#setwd("C:/Users/lgomez/Mi unidad/Teaching and research GENERAL/00_Teaching/Introduction to time series analysis in Ecology (SIBECOL)/Time series 2024 (SIBECOL)/Sessions")
 getwd()
 ```
 
@@ -821,7 +821,7 @@ Let's now read the .csv file need it for the exercise, for this we will
 use the function `read_csv()`, which is part of the core `tidyverse`.
 
 ```{r read files.exercise}
-snow_pyr <- read_csv('Data/snow_pyrenees_anomaly.csv')
+snow_pyr <- read_csv('snow_pyrenees_anomaly.csv')
 ```
 
 In this exercise we will focus in the long-term TS of snow cover in the
