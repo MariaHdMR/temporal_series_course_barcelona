@@ -1,0 +1,668 @@
+---
+title: "Introduction to time series analyses in Ecology (SIBECOL course 2024)"
+subtitle: 'Session 5: Data imputation'
+author:
+- Lluís Gómez Gener^[CREAF, gomez.gener87@gmail.com]
+- Anna Lupon^[CSIC-CEAB, anna.lupon@gmail.com]
+- Gerard Rocher-Ros^[Swedish University of Agricultural Sciences / CSIC-CEAB, g.rocher.ros@gmail.com]
+date: "08/02/2024"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: flatly
+    highlight: pygments
+  pdf_document:
+    toc: yes
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+# Introduction
+Data imputation (or gap filling or data replacement) is the process by which we use a statistical tool or algorithm (i.e., imputation algorithm) to fill a gap (or groups of gaps) from a univariate or multivariate time series.
+
+In this session we will learn how tow use the R packages `imputeTS` and`miceRanger` in a combined way to:
+1st) diagnose the de "degree of missingness", and 
+2nd) automatically fill the gaps in a sensor TS (both in an univariate and multivariate context and using simple to more advanced algorithms), and
+3d) diagnose the success of the imputation.
+
+The data we will use in this session is basically the output of the previous lecture on anomaly detection and data cleaning. More information and all the codes can be found in the Time-series in R_sensors_anomalies - R Markdown file.
+
+This session is part of the ppt. presentation "Time Series of Environmental Sensors: Dealing with anomalies missing data", in which you will find a more general context.
+
+# Loading specific R Packages
+
+We need to install and load some specific R packages:
+
+```{r packages}
+library(imputeTS)
+library(miceRanger)
+library(naniar)
+library(visdat)
+library(tidyverse)
+```
+We also need to set up the working directory (i.e., folder where where R will find the files or/and store the outputs). This path MUST correspond to the path where your data is stored:
+
+
+# 1. Data import 
+
+## Working directory
+
+First of all, we will set up the working directory (i.e., folder where where R will find the files or/and store the outputs). This path MUST correspond to the path where your data is stored:
+
+```{r set working directory}
+getwd()
+```
+
+
+## Data file:
+
+Now we are are ready to read the .csv files, for this we will use the function `read_csv()`, which is part of the core `tidyverse`. 
+
+```{r read files}
+vau_window_gap_turb <- read_csv('vau_window_gap_turb_2.csv')
+
+```
+
+# 2. Diagnosis of gaps (secondary)
+
+In this session we will work with the "cleaned version" of the TS data file we just obtained in the previous session (note that additional gaps have been created "artificially" to make the exercise more exciting). Let's have a look how this TS looks like: 
+
+```{r visualize}
+plot.ts(vau_window_gap_turb)
+```
+
+First of all we want to get an idea of the quantity, length and temporal distribution of gaps in our TS. To do so we will perform both diagnosis graphs as well as print missing data statistics (see Section 2.2 at Session X).
+
+1st. General diagnosis of gaps (all variables are assessed):
+
+```{r vis.gap.diagnosis.1}
+vis_miss(vau_window_gap_turb)
+```
+
+2nd. Individual diagnosis of gaps (only one variables is assesed each time):
+
+```{r vis.gap.diagnosis.2}
+ggplot_na_distribution(vau_window_gap_turb$water.turb)
+```
+
+3d. Statistical diagnosis:
+
+```{r gap.statistics}
+statsNA(vau_window_gap_turb$water.turb)
+```
+  
+#3. Simple imputation methods for univariate TS datasets
+
+One of the key steps in data imputation is to select a “suitable” imputation method. So for instance, it is crystal clear that there is not need for a complex round of computations if there is only one gap in a 200 years TS at 1 second frequency. You will basically do nothing or perhaps apply a simple interpolation (e.g., linear interpolation). But things are normally not that straightforward and thus taking decisions on imputation are sometimes difficult (to imput or not to imput? is there any "Rule of thumb" to take our decisions?)
+
+In this subsection we will describe "simple approaches" that aim to solve "simple or short-format gap issues" using the `imputeTS` package.
+
+## 3.1. Missing Value Imputation by Interpolation
+
+Uses either "linear interpolation" or "polynomial interpolations" such us "spline" or "stine" to replace missing values.
+
+```{r interpol}
+vau_interpolated <- vau_window_gap_turb$water.turb%>% 
+                    na_interpolation(option = "spline")
+ggplot_na_distribution(vau_interpolated)
+```
+
+
+## 3.2. Missing Value Imputation by Weighted Moving Average
+
+Missing value replacement by weighted moving average. Uses semi-adaptive window size to ensure all NAs are replaced. With `na_ma()`, imputes missing values with an average of the non-missing observations before and after the missing observation.
+
+```{r ma}
+vau_wma <- vau_window_gap_turb$water.turb%>%  
+           na_ma(k=2, weighting = "simple")
+
+ggplot_na_distribution(vau_wma)
+```
+
+## 3.3. Missing Value Imputation by Last Observation Carried Forward
+
+Replaces each missing value with the most recent present value prior to it (Last Observation Carried Forward- LOCF).
+
+```{r locf}
+vau_locf <- vau_window_gap_turb$water.turb%>% 
+            na_locf(option = "locf")
+
+ggplot_na_distribution(vau_locf)
+```
+
+
+## 3.4. Other useful actions
+
+```{r na.remove}
+vau_remove <- vau_window_gap_turb$water.turb%>% 
+                          na_remove()
+ggplot_na_distribution(vau_remove)
+```
+Be aware that the TS gets obviously shorter!
+
+
+# 4. Advanced imputation methods for univariate and multivariate TS datasets
+
+In this section we will focus in a specific imputation tool that uses both Multiple Imputation by Chained Equations (MICE) with a random forests machine learning algorithm. Machine learning comprises a group of computational algorithms that can perform pattern recognition, classification, and prediction on data by learning from existing data (training set).
+
+For more information check out the`miceRanger` resources section.
+
+## 4.1. Perform gap filling on "ONE variable" using miceRanger
+
+```{r mic.ranger.1}
+  miceObj_m3_iter_5<- miceRanger(vau_window_gap_turb,
+                      m=3, 
+                      maxiter = 5,
+                      verbose=TRUE)
+```
+
+Let's check the how it went (data imputation diagnosis tools):
+
+A) plotModelError
+
+Random Forests give us a cheap way to determine model error without cross validation. Each model returns the OOB accuracy for classification, and r-squared for regression. We can see how these converged as the iterations progress:
+
+```{r plotModelError.mic.ranger.1}
+plotModelError(miceObj_m3_iter_5,vars='allNumeric') 
+```
+
+B) plotDistributions
+
+Shows the distribution of the original data and the distribution of the imputed data. The gap filling went OK 
+```{r plotDistributions.mic.ranger.1}
+plotDistributions(miceObj_m3_iter_5) 
+```
+
+The red line is the density of the original, nonmissing data. The smaller, black lines are the density of the imputed values in each of the datasets. If these don’t match up, it’s not a problem, however it may tell you that your data was not Missing Completely at Random (MCAR).
+
+C) plotVarImportance
+
+Now let’s plot the variable importance for each imputed variable. The top axis contains the variable that was used to impute the variable on the left axis.
+
+```{r plotVarImportance.mic.ranger.1}
+plotVarImportance(miceObj_m3_iter_5) 
+```
+
+List imputed datasets:
+
+```{r list.datasets.mic.ranger.1}
+dataList <- completeData(miceObj_m3_iter_5)
+ds1 <- dataList[[1]]
+ds2 <- dataList[[2]]
+ds3 <- dataList[[3]] 
+```
+
+Visualization of time series with (Measured data) and without (Imputed data) gaps:
+
+```{r plots.mic.ranger.1}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1$water.turb, type="l", col ="green", 
+     xlab = "Time", ylab = "Turbdity (NTU)")
+lines(ds2$water.turb, type="l", col="green")
+lines(ds3$water.turb, type="l", col="green")
+lines(vau_window_gap_turb$water.turb, type="l", col=1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+
+## 4.2. Perform gap filling on "ONE variable" using miceRanger (lets challange the model performance)
+
+1st. Let's make more "artificial" gaps into the response variable TS
+
+```{r add.gaps.mic.ranger.2}
+vau_window_gap_turb_challange_1 <- amputeData(vau_window_gap_turb[,9],perc=0.5)
+vau_window_gap_turb_challange_1 <- cbind(vau_window_gap_turb[,1:8],vau_window_gap_turb_challange_1)
+vau_window_gap_turb_challange_1 <- cbind(vau_window_gap_turb[,10],vau_window_gap_turb_challange_1)
+
+plot.ts(vau_window_gap_turb_challange_1)
+```
+
+Let's run miceRanger again:
+
+```{r mic.ranger.2}
+miceObj_m3_iter_5<- miceRanger(vau_window_gap_turb_challange_1,
+                               m=3,
+                               maxiter = 5,
+                               verbose=TRUE)
+```
+
+Let's check the how it went (data imputation diagnosis tools):
+
+A) plotModelError
+
+Random Forests give us a cheap way to determine model error without cross validation. Each model returns the OOB accuracy for classification, and r-squared for regression. We can see how these converged as the iterations progress:
+
+```{r plotModelError.mic.ranger.2}
+plotModelError(miceObj_m3_iter_5,vars='allNumeric') 
+```
+
+B) plotDistributions
+
+Shows the distribution of the original data and the distribution of the imputed data. The gap filling went OK 
+
+```{r plotDistributions.mic.ranger.2}
+plotDistributions(miceObj_m3_iter_5) 
+```
+
+The red line is the density of the original, nonmissing data. The smaller, black lines are the density of the imputed values in each of the datasets. If these don’t match up, it’s not a problem, however it may tell you that your data was not Missing Completely at Random (MCAR).
+
+C) plotVarImportance
+
+Now let’s plot the variable importance for each imputed variable. The top axis contains the variable that was used to impute the variable on the left axis.
+
+```{r plotVarImportance.mic.ranger.2}
+plotVarImportance(miceObj_m3_iter_5) 
+```
+
+List imputed datasets:
+
+```{r list.datasets.mic.ranger.2}
+dataList <- completeData(miceObj_m3_iter_5)
+ds1 <- dataList[[1]]
+ds2 <- dataList[[2]]
+ds3 <- dataList[[3]] 
+```
+
+Visualization of time series with (Measured data) and without (Imputed data) gaps:
+
+```{r plots.mic.ranger.2}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1$water.turb, type="l", col ="green", 
+     xlab = "Time", ylab = "Turbdity (NTU)")
+lines(ds2$water.turb, type="l", col="green")
+lines(ds3$water.turb, type="l", col="green")
+lines(vau_window_gap_turb_challange_1$water.turb, type="l", col=1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+## 4.3. Perform gap filling on "ONE variable" using miceRanger (lets challange the model performance a bit more!)
+
+1st. Let's make more "artificial" gaps into the response variable TS
+
+```{r add.gaps.mic.ranger.3}
+vau_window_gap_turb_challange_2 <- amputeData(vau_window_gap_turb[,9],perc=0.75)
+vau_window_gap_turb_challange_2 <- cbind(vau_window_gap_turb[,1:8],vau_window_gap_turb_challange_2)
+vau_window_gap_turb_challange_2 <- cbind(vau_window_gap_turb[,10],vau_window_gap_turb_challange_2)
+
+plot.ts(vau_window_gap_turb_challange_2)
+```
+2nd. Let's remove an IMPORTANT VARIABLES according with the Variable Importance graph
+
+```{r remove.var.mic.ranger.3}
+vau_window_gap_turb_challange_2 <- subset(vau_window_gap_turb_challange_2, select = -water.depth )
+plot.ts(vau_window_gap_turb_challange_2)
+```
+
+Let's run miceRanger again:
+
+```{r mic.ranger.3}
+miceObj_m3_iter_5<- miceRanger(vau_window_gap_turb_challange_2,
+                               m=3,
+                               maxiter = 5,
+                               verbose=TRUE)
+```
+
+Let's check the how it went (data imputation diagnosis tools):
+
+A) plotModelError
+
+Random Forests give us a cheap way to determine model error without cross validation. Each model returns the OOB accuracy for classification, and r-squared for regression. We can see how these converged as the iterations progress:
+
+```{r plotModelError.mic.ranger.3}
+plotModelError(miceObj_m3_iter_5,vars='allNumeric') 
+```
+
+B) plotDistributions
+
+Shows the distribution of the original data and the distribution of the imputed data. The gap filling went OK 
+
+```{r plotDistributions.mic.ranger.3}
+plotDistributions(miceObj_m3_iter_5) 
+```
+
+The red line is the density of the original, nonmissing data. The smaller, black lines are the density of the imputed values in each of the datasets. If these don’t match up, it’s not a problem, however it may tell you that your data was not Missing Completely at Random (MCAR).
+
+C) plotVarImportance
+
+Now let’s plot the variable importance for each imputed variable. The top axis contains the variable that was used to impute the variable on the left axis.
+
+```{r plotVarImportance.mic.ranger.3}
+plotVarImportance(miceObj_m3_iter_5) 
+```
+
+List imputed datasets:
+
+```{r list.datasets.mic.ranger.3}
+dataList <- completeData(miceObj_m3_iter_5)
+ds1 <- dataList[[1]]
+ds2 <- dataList[[2]]
+ds3 <- dataList[[3]] 
+```
+
+Visualization of time series with (Measured data) and without (Imputed data) gaps:
+
+```{r plots.mic.ranger.3}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1$water.turb, type="l", col ="green", 
+     xlab = "Time", ylab = "Turbdity (NTU)")
+lines(ds2$water.turb, type="l", col="green")
+lines(ds3$water.turb, type="l", col="green")
+lines(vau_window_gap_turb_challange_2$water.turb, type="l", col=1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+## 4.4. Perform gap filling on "MULTIPLE variable" using miceRanger 
+
+Let's first make the gaps into all the variables of the TS
+
+```{r add.gaps.mic.ranger.4}
+vau_window_gap_multiple <- amputeData(vau_window_gap_turb[,4:10],perc=0.25)
+#mice_window_multiple <- cbind(mice_window[,1:2],mice_window_multiple)
+
+plot.ts(vau_window_gap_multiple)
+```
+
+Let's remove date and time to evaluate how important are for the models.
+
+```{r remove.var.mic.ranger.4}
+#mice_window_multiple<- mice_window_multiple %>% select (-c(datetime,date))
+
+#plot.ts(mice_window_multiple)
+```
+
+
+Let's run miceRanger again:
+
+```{r mic.ranger.4}
+miceObj_m3_iter_5<- miceRanger(vau_window_gap_multiple,
+                    m=3,
+                    maxiter = 5,
+                    verbose=TRUE)
+```
+
+Let's check the how it went (data imputation diagnosis tools):
+
+A) plotModelError
+
+Random Forests give us a cheap way to determine model error without cross validation. Each model returns the OOB accuracy for classification, and r-squared for regression. We can see how these converged as the iterations progress:
+
+```{r plotModelError.mic.ranger.4}
+plotModelError(miceObj_m3_iter_5,vars='allNumeric') 
+```
+
+B) plotDistributions
+
+Shows the distribution of the original data and the distribution of the imputed data. The gap filling went OK 
+
+```{r plotDistributions.mic.ranger.4}
+plotDistributions(miceObj_m3_iter_5) 
+```
+
+The red line is the density of the original, nonmissing data. The smaller, black lines are the density of the imputed values in each of the datasets. If these don’t match up, it’s not a problem, however it may tell you that your data was not Missing Completely at Random (MCAR).
+
+C) plotVarImportance
+
+Now let’s plot the variable importance for each imputed variable. The top axis contains the variable that was used to impute the variable on the left axis.
+
+```{r plotVarImportance.mic.ranger.4}
+plotVarImportance(miceObj_m3_iter_5) 
+```
+
+List imputed datasets:
+
+```{r list.datasets.mic.ranger.4}
+dataList <- completeData(miceObj_m3_iter_5)
+ds1 <- dataList[[1]]
+ds2 <- dataList[[2]]
+ds3 <- dataList[[3]] 
+```
+
+Visualization of time series with (Measured data) and without (Imputed data) gaps:
+
+```{r plots.air.temp.mic.ranger.4}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1$air.temp, type="l", col ="green", 
+     xlab = "Time", ylab = "Air Temperature (ºC)")
+lines(ds2$air.temp, type="l", col="green")
+lines(ds3$air.temp, type="l", col="green")
+lines(vau_window_gap_multiple$air.temp, type="l", col=1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+```{r plots.do.mic.ranger.4}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1$water.O2, type="l", col ="green", 
+     xlab = "Time", ylab = expression(paste(DO~(mg~L^-1))))
+lines(ds2$water.O2, type="l", col="green")
+lines(ds3$water.O2, type="l", col="green")
+lines(vau_window_gap_multiple$water.O2, type="l", col=1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+```{r plots.cond.mic.ranger.4}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1$water.cond, type="l", col ="green", 
+     xlab = "Time", ylab = "Conductivity (uS/cm)")
+lines(ds2$water.cond, type="l", col="green")
+lines(ds3$water.cond, type="l", col="green")
+lines(vau_window_gap_multiple$water.cond, type="l", col=1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+```{r plots.air.bp.mic.ranger.4}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1$air.bp, type="l", col ="green", 
+     xlab = "Time", ylab = "Atmospheric Pressure (mBar)")
+lines(ds2$air.bp, type="l", col="green")
+lines(ds3$air.bp, type="l", col="green")
+lines(vau_window_gap_multiple$air.bp, type="l", col=1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+```{r plots.turb.mic.ranger.4}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1$water.turb, type="l", col ="green", 
+     xlab = "Time", ylab = "Turbidity (NTU)")
+lines(ds2$water.turb, type="l", col="green")
+lines(ds3$water.turb, type="l", col="green")
+lines(vau_window_gap_multiple$water.turb, type="l", col=1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+# Exercise 2: Snow cover - Data imputation
+
+Let's first read the .csv file need it for the exercise, for this we will use the function `read_csv()`, which is part of the core `tidyverse`.
+
+```{r read files.exercise}
+snow_pyr <- read_csv('snow_pyrenees_gaps.csv')
+```
+
+In this exercise we will focus in the long-term TS of snow cover in the Pyrenees obtained by the Moderate Resolution Imaging Spectroradiometer (MODIS) instrument. For a more detailed description of the methods see:[Website](https://zenodo.org/record/162299#.YkgWtyjP02w). Additionally, the updated data is visible here: [Website](https://labo.obs-mip.fr/multitemp/pyrenees-snow-monitor/). 
+
+Let's have a look how this TS looks like: 
+
+```{r visualize.exercise}
+plot.ts(snow_pyr)
+```
+
+## Question 1: Describe numerically (with a short statistical report) and visually how is the gap structure in the snow area variable of the TS.
+
+
+Let's now start with the gaps diagnosis of the stream water temperature TS.
+
+1st. Visual diagnosis:
+
+```{r vis.gap.diagnosis.exercise}
+vis_miss(snow_pyr)
+ggplot_na_distribution(snow_pyr$snow_area_km2)
+```
+
+2nd. Data statistics:
+
+```{r gap.statistics.exercise}
+statsNA(snow_pyr$snow_area_km2)
+miss_summary<- miss_var_summary(snow_pyr)
+```
+  
+## Question 2. Fill the gaps with a suitable method/s and justify the use of it.
+
+```{r mic.ranger.exercise}
+seqTime <- system.time(
+  micesnow<- miceRanger(
+    snow_pyr
+    , m=3
+    , maxiter = 5
+    , verbose=TRUE
+  )
+)
+```
+
+Let's check the how it went (data imputation diagnosis tools):
+
+A) plotModelError
+
+Random Forests give us a cheap way to determine model error without cross validation. Each model returns the OOB accuracy for classification, and r-squared for regression. We can see how these converged as the iterations progress:
+
+```{r plotModelError.mic.ranger.exercise}
+plotModelError(micesnow,vars='allNumeric') 
+```
+
+B) plotDistributions
+
+Shows the distribution of the original data and the distribution of the imputed data. The gap filling went OK 
+
+```{r plotDistributions.mic.ranger.exercise}
+plotDistributions(micesnow) 
+```
+
+The red line is the density of the original, nonmissing data. The smaller, black lines are the density of the imputed values in each of the datasets. If these don’t match up, it’s not a problem, however it may tell you that your data was not Missing Completely at Random (MCAR).
+
+
+C) plotVarImportance
+
+Now let’s plot the variable importance for each imputed variable. The top axis contains the variable that was used to impute the variable on the left axis.
+
+```{r plotVarImportance.mic.ranger.exercise}
+plotVarImportance(micesnow) 
+```
+
+List imputed datasets:
+
+```{r list.datasets.mic.ranger.exercise}
+dataList <- completeData(micesnow)
+ds1 <- dataList[[1]]
+ds2 <- dataList[[2]]
+ds3 <- dataList[[3]] 
+```
+
+Visualization of time series with (Measured data) and without (Imputed data) gaps:
+
+```{r plots.mic.ranger.exercise}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1$snow_area_km2, type="l", col ="green", 
+     xlab = "Time", ylab = "Temperature (ºC)")
+lines(ds2$snow_area_km2, type="l", col="green")
+lines(ds3$snow_area_km2, type="l", col="green")
+lines(snow_pyr$snow_area_km2, type="l", col=1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+Let's add the original dataset (with no gaps) and see how they compare?
+
+```{r read files.exercise.2}
+snow_pyr_full <- read_csv('snow_pyrenees.csv')
+```
+
+```{r plots.mic.ranger.snow.2}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1$snow_area_km2, type="l", col ="#00FF0040", 
+     xlab = "Time", ylab = "Temperature (ºC)")
+lines(ds2$snow_area_km2, type="l", col="#00FF0040")
+lines(ds3$snow_area_km2, type="l", col="#00FF0040")
+#lines(snow_pyr$snow_area_km2, type="l", col=1)
+lines(snow_pyr_full$snow_area_km2, type="l", col="grey30", lwd=0.1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+
+```{r correlation.plots}
+plot(ds1$snow_area_km2,snow_pyr_full$snow_area_km2)
+abline(0,1, col="red")
+```
+
+## Question 3. Remove the "date" column and evaluate the perforance of the new inputation.
+
+```{r correlation.plots}
+snow_pyr_full_change_1 <- subset(snow_pyr, select = -date )
+plot.ts(snow_pyr_full_change_1)
+
+```
+```{r vis.gap.diagnosis.exercise}
+vis_miss(snow_pyr_full_change_1)
+ggplot_na_distribution(snow_pyr_full_change_1$snow_area_km2)
+```
+```{r gap.statistics.exercise}
+statsNA(snow_pyr_full_change_1$snow_area_km2)
+miss_summary1<- miss_var_summary(snow_pyr_full_change_1)
+```
+```{r mic.ranger.exercise}
+seqTime1 <- system.time(
+  micesnow1<- miceRanger(
+    snow_pyr_full_change_1
+    , m=3
+    , maxiter = 5
+    , verbose=TRUE
+  )
+)
+```
+```{r plotModelError.mic.ranger.exercise}
+plotModelError(micesnow1,vars='allNumeric') 
+```
+```{r plotDistributions.mic.ranger.exercise}
+plotDistributions(micesnow1) 
+```
+```{r plotVarImportance.mic.ranger.exercise}
+plotVarImportance(micesnow1) 
+```
+```{r list.datasets.mic.ranger.exercise}
+dataList1 <- completeData(micesnow1)
+ds1.1 <- dataList1[[1]]
+ds2.1 <- dataList1[[2]]
+ds3.1 <- dataList1[[3]] 
+```
+
+```{r plots.mic.ranger.exercise}
+par(mfrow= c(1,1), mar = c(3,4.5,1,1))
+plot(ds1.1$snow_area_km2, type="l", col ="green", 
+     xlab = "Time", ylab = "Temperature (ºC)")
+lines(ds2.1$snow_area_km2, type="l", col="green")
+lines(ds3.1$snow_area_km2, type="l", col="green")
+lines(snow_pyr$snow_area_km2, type="l", col=1)
+legend("topleft", c("Measured data", "Imputed data"), lty =1, col = c(1,3))
+```
+
+Me falta continuar los plots
+
+
+# Session resources
+
+### `imputeTS` resources
+* Moritz, S. *imputeTS github webpage* [Website](https://github.com/cran/imputeTS).
+* Moritz, S. *imputeTS reference manual* [Website](https://cran.r-project.org/web/packages/imputeTS/imputeTS.pdf).
+
+###  `miceRanger` resources
+* Wilson, S. *miceRanger github webpage* [Website](https://github.com/FarrellDay/miceRanger).
+* Wilson, S. *miceRanger reference manual* [Website](https://cran.r-project.org/web/packages/miceRanger/miceRanger.pdf).
+
+###  Additional resources
+* DataCamp Online Course *Dealing With Missing Data in R* [Website](https://app.datacamp.com/learn/courses/dealing-with-missing-data-in-r).
+
+* Van Buuren, S., 2018 *Flexible Imputation of Missing Data* [Website](https://www.taylorfrancis.com/books/edit/10.1201/9780429492259/flexible-imputation-missing-data-stef-van-buuren).
+
+* Van Buuren, S. and Groothuis-Oudshoorn, K., 2011. *mice: Multivariate Imputation by Chained Equations in R. Journal of Statistical Software* [File]()
+
+
