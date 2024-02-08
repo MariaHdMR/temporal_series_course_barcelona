@@ -1,21 +1,21 @@
 ---
 title: "Introduction to time series analyses in Ecology (SIBECOL course 2024)"
 subtitle: "Session 4: Data import, exploration and cleaning"
-
 output: 
     html_document:
+      
       toc: true
       toc_float: true
       theme: flatly
       highlight: pygments
-      
 author: 
   - Lluís Gómez Gener^[CREAF, gomez.gener87@gmail.com]
   - Anna Lupon^[CSIC-CEAB, anna.lupon@gmail.com]
   - Gerard Rocher-Ros^[Swedish University of Agricultural Sciences / CSIC-CEAB, g.rocher.ros@gmail.com]
-
-
 date: "08/02/2024"
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
@@ -24,12 +24,13 @@ knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
 
 # Introduction
 
-In this session we will provide a basic R workflow for importing, exploring and cleaning high-frequency (HF) sensor time series (TS). This session is divided in 3 main subsections:
+In this session we will provide a basic R workflow for importing,
+exploring and cleaning high-frequency (HF) sensor time series (TS). This
+session is divided in 3 main subsections:
 
 -   Import of a high-frequency TS datasets
--   Exploration of a "raw" high-frequency TS 
--   Detection and removal of anomalies in a high-frequency TS 
-
+-   Exploration of a "raw" high-frequency TS
+-   Detection and removal of anomalies in a high-frequency TS
 
 # Loading specific R Packages
 
@@ -58,20 +59,29 @@ library(pillar)
 
 ## Working directory
 
-First of all, we will set up the working directory (i.e., folder where where R will find the files or/and store the outputs). This path MUST correspond to the path where your data is stored:
+First of all, we will set up the working directory (i.e., folder where
+where R will find the files or/and store the outputs). This path MUST
+correspond to the path where your data is stored:
 
 ```{r set working directory}
 getwd()
 ```
 
-
 ## Data file
 
-In most cases we need to read (or import) an external data file (i.e., the data from our sensors). However, as most sensor data is recorded below the "day" frequency (we normally define HF to time series in which the time scale is on the order of minutes or hours), we need to make sure that R properly understand (or load) the Date, the Time and the Date&Time variables from our external file.
+In most cases we need to read (or import) an external data file (i.e.,
+the data from our sensors). However, as most sensor data is recorded
+below the "day" frequency (we normally define HF to time series in which
+the time scale is on the order of minutes or hours), we need to make
+sure that R properly understand (or load) the Date, the Time and the
+Date&Time variables from our external file.
 
-For most of the session, we will work with the file "vau_all_2019.csv", which contains HF  time series  for several environmental sensors installed in a high mountain river in Switzerland.
+For most of the session, we will work with the file "vau_all_2019.csv",
+which contains HF time series for several environmental sensors
+installed in a high mountain river in Switzerland.
 
-To import an external TS we will use the function `read_csv()`, which is part of the core `tidyverse`.
+To import an external TS we will use the function `read_csv()`, which is
+part of the core `tidyverse`.
 
 ```{r read files}
 vau = read.csv (file="vau_all_2019_course.csv",
@@ -91,9 +101,14 @@ vau = vau %>% mutate (datetime = as.POSIXct(datetime, tz = "UTC",
 
 ## Time series objects
 
-Note that time series files can have different data structures (or object class). In this case the we are dealing with a data frame (*`as_data_frame`*) data structure. Other commonn ones are: time series (*`ts`* or *`as.ts`*) or ttibble (*`as_tibble`*).
+Note that time series files can have different data structures (or
+object class). In this case the we are dealing with a data frame
+(*`as_data_frame`*) data structure. Other commonn ones are: time series
+(*`ts`* or *`as.ts`*) or ttibble (*`as_tibble`*).
 
-To identify the class of any object, use the *`class`* or *`str`* function (which additionally provides the class types of each variable or object within the main file)
+To identify the class of any object, use the *`class`* or *`str`*
+function (which additionally provides the class types of each variable
+or object within the main file)
 
 ```{r identify class}
 class(vau)
@@ -102,7 +117,9 @@ str(vau)
 
 ## Dealing with date and time
 
-A date-time object in POSIXct format stores date and time in seconds with the number of seconds beginning at 1 January 1970 (or 1970-01-01 00:00:01)
+A date-time object in POSIXct format stores date and time in seconds
+with the number of seconds beginning at 1 January 1970 (or 1970-01-01
+00:00:01)
 
 ```{r as.numeric}
 head(as.numeric(vau$datetime))
@@ -114,14 +131,19 @@ as_datetime(1)
 as_datetime(1511870400)
 ```
 
-**Data and time conversions**
-BUT what if the initial data-time is in a "weird" format (WE NEED TO CONVERT as the standardized format for a TS is yyyy-mm-dd hh:mm:ss").
+**Data and time conversions** BUT what if the initial data-time is in a
+"weird" format (WE NEED TO CONVERT as the standardized format for a TS
+is yyyy-mm-dd hh:mm:ss").
 
-All the conversion examples are at: [Website](https://lubridate.tidyverse.org/)
+All the conversion examples are at:
+[Website](https://lubridate.tidyverse.org/)
 
-*lubridate Cheat Sheet* [Website](https://rawgit.com/rstudio/cheatsheets/main/lubridate.pdf)
+*lubridate Cheat Sheet*
+[Website](https://rawgit.com/rstudio/cheatsheets/main/lubridate.pdf)
 
-The functions below identify the order of the year (y), month (m), day (d), hour (h), minute (m) and second (s) elements in your data and transforms to POSIXct date-time format.
+The functions below identify the order of the year (y), month (m), day
+(d), hour (h), minute (m) and second (s) elements in your data and
+transforms to POSIXct date-time format.
 
 See few examples with common cases below:
 
@@ -145,7 +167,8 @@ head(vau$datetime)
 head(vau$datetime_merged)
 ```
 
-Another useful option is to convert from "Dates" to "Day of the year" (as a numeric class)
+Another useful option is to convert from "Dates" to "Day of the year"
+(as a numeric class)
 
 ```{r year}
 vau$year<-format(vau$date, "%Y")     
@@ -166,7 +189,8 @@ head(vau$doy)
 tail(vau$doy)
 ```
 
-To drop off a complete column (or several of them) that are not useful for the subsequent analysis:
+To drop off a complete column (or several of them) that are not useful
+for the subsequent analysis:
 
 ```{r drop.off}
 vau$datetime_merged<-NULL
@@ -175,16 +199,20 @@ vau$month<-NULL
 vau$doy<-NULL
 ```
 
-
 # 2. Exploration of a "raw" high-frequency TS
 
-This section is divided in two: the first part (2.1) focuses on the graphical representation of time series using various resources in R Studio (i.e., Base R, ggplot2 and plotly). The second part is more specific for exploring gaps in time series and contains resources for both visual analysis and numerical analysis. 
+This section is divided in two: the first part (2.1) focuses on the
+graphical representation of time series using various resources in R
+Studio (i.e., Base R, ggplot2 and plotly). The second part is more
+specific for exploring gaps in time series and contains resources for
+both visual analysis and numerical analysis.
 
 ## 2.1. Visual exploration
 
 ### Time series plots using Base R
 
-First we will start by making a multi-panel plot (2 plots one above the other one) with two distinct variables (only using the first y-axis):
+First we will start by making a multi-panel plot (2 plots one above the
+other one) with two distinct variables (only using the first y-axis):
 
 ```{r plot.one.variable.r}
 par(mfrow= c(2,1), mar = c(3,4.5,0.5,0.5))
@@ -194,7 +222,9 @@ plot(vau$datetime,vau$water.depth,cex=.25,cex.axis=0.9,type="n",xlab="",ylab="Wa
 lines(vau$datetime,vau$water.depth,cex=0.75,lwd=1,lty=1,pch=21, type="o", col="Steel Blue", bg="Steel Blue") 
 ```
 
-Now we will make a multi-line plot (in one single panel) for one common variable but for different study sites or earth compartments (e.g., atmospheric temperature vs. stream water temperature).
+Now we will make a multi-line plot (in one single panel) for one common
+variable but for different study sites or earth compartments (e.g.,
+atmospheric temperature vs. stream water temperature).
 
 ```{r plot.multiple.sites.r}
 par(mfrow= c(1,1), mar = c(3,4.5,0.5,0.5))
@@ -298,25 +328,26 @@ vau %>% filter(datetime > datelimits[1] & datetime < datelimits[2]) %>%
   scale_x_datetime(date_labels = "%Y-%m-%d %H:%M" )
 ```
 
+### Time series plots using plotly
 
-### Time series plots using plotly 
-The `ts_plot`  function from the `TSstudio` package is a fast and simple plotting function for time series (relatively  limited customization).
+The `ts_plot` function from the `TSstudio` package is a fast and simple
+plotting function for time series (relatively limited customization).
 
 *TSstudio* [Website](https://ramikrispin.github.io/TSstudio/).
 
 It supports the following time-series classes:
 
-- ts
-- mts
-- zoo
-- xts
-- data.frame (*)
-- tbl
+-   ts
+-   mts
+-   zoo
+-   xts
+-   data.frame (\*)
+-   tbl
 
-*Must have a "Date" or "POSIXct/lt" column and at least on numeric column
+\*Must have a "Date" or "POSIXct/lt" column and at least on numeric
+column
 
 ts_info(vau)
-
 
 ```{r ts_plot.All}
 # Convert to "Date" format
@@ -338,11 +369,11 @@ ts_plot(vau,
         type = "multiple")
 ```
 
+## 2.2. Diagnosis of gaps
 
-## 2.2. Diagnosis of gaps 
-
-To visually inspect and numerical describe the missing data pattern (i.e., quantity, length and temporal distribution of gaps) of our high-frequency TS.
-
+To visually inspect and numerical describe the missing data pattern
+(i.e., quantity, length and temporal distribution of gaps) of our
+high-frequency TS.
 
 ### Visual diagnosis of gaps
 
@@ -360,7 +391,9 @@ vis_miss(vau_window)
 gg_miss_var(vau_window)
 ```
 
-`Vis_miss` produces a "heatmap" of the missingness - like as if the plot corresponded to the dataset as a giant spreadsheet, with values colored black for missing, and gray for present.
+`Vis_miss` produces a "heatmap" of the missingness - like as if the plot
+corresponded to the dataset as a giant spreadsheet, with values colored
+black for missing, and gray for present.
 
 ### Numerical diagnosis of gaps
 
@@ -368,7 +401,7 @@ By numerical variables (numerical class):
 
 ```{r summary.vairable.at}
 size_vau_at <-vau %>% 
-                  summarise_at(c("air.temp", "water.temp"), 
+                  summarise_at(c("air.temp", "water.temp"), #seleccionamos variables numericas y le preguntamos las #funciones que ponems en funs
                   funs(mean, 
                        median,
                        no.na=sum(!is.na(.)),
@@ -376,12 +409,11 @@ size_vau_at <-vau %>%
                   na.rm=TRUE)
 ```
 
-
 All numerical variables (numerical class):
 
 ```{r summary.vairable.if}
 size_vau_if <-vau %>% 
-                  summarise_if(is.numeric,  
+                  summarise_if(is.numeric,  #only takes de numerical class objets, solo numeros ahora. Selecciona sola la clase. En diferencia con summarise_at selecciona las variables que quieres mirar, aqui lo que seleccionas son el tipo de datos que quieres mirar. 
                   funs(mean, 
                        median,
                        no.na=sum(!is.na(.)),
@@ -413,9 +445,11 @@ statsNA(vau_window$air.temp)
 
 ### 3.1. Locating and removing "simple" anomalies applying rules (manual)
 
-This approach aims at incorporating simple rules into our "TS cleaning workflow" to detect anomalies such as out-of-range values, impossible values (e.g., negative values), and missing values.
+This approach aims at incorporating simple rules into our "TS cleaning
+workflow" to detect anomalies such as out-of-range values, impossible
+values (e.g., negative values), and missing values.
 
-Let's first subset the  "vau" data frame to make the computations faster:
+Let's first subset the "vau" data frame to make the computations faster:
 
 ```{r subset data.frame.1}
 vau$date<-as.Date(vau$date)
@@ -423,12 +457,17 @@ vau_window<-vau %>% filter(between(date,
                     as.Date('2018-04-30'), as.Date('2018-07-31')))
 ```
 
-Let's now convert our time series from a `data.frame` to a `tbl` class object:
+Let's now convert our time series from a `data.frame` to a `tbl` class
+object:
 
 ```{r convert to tibble.1}
 vau_window <- as_tibble(vau_window)
 ```
-Note that the rules applied here will be specific for a high-frequency time-series of turbidity measured in a high-mountain headwater stream. Let's make a preliminary visual diagnosis of anomalies in the turbidity time series:
+
+Note that the rules applied here will be specific for a high-frequency
+time-series of turbidity measured in a high-mountain headwater stream.
+Let's make a preliminary visual diagnosis of anomalies in the turbidity
+time series:
 
 ```{r visualize.1}
 adjustcolor( "black", alpha.f = 0.5)
@@ -447,7 +486,6 @@ plot.ts(vau_window$water.turb,
 ```{r negative values}
 vau_window$water.turb.neg<-ifelse(vau_window$water.turb < (0.00), NA,vau_window$water.turb)
 ```
-
 
 ```{r visualize.2}
 par(mfrow= c(2,1), mar = c(3,4.5,0.5,0.5))
@@ -469,7 +507,6 @@ plot.ts(vau_window$water.turb.neg,
         abline(h=0, col="red", lwd=1.25))
 
 ```
-
 
 #### Rule 2: Sensor reading outside the corresponding sensor detection range
 
@@ -508,7 +545,6 @@ plot.ts(vau_window$water.turb.neg.out,
 
 ```
 
-
 ### 3.2. Locating and removing "complex" anomalies (manual)
 
 ```{r visualize.5}
@@ -520,7 +556,6 @@ plot.ts(vau_window$water.turb.neg.out,
         col="#00000080",
         ylab="Turbidity (NTU)")
 ```
-
 
 ```{r insert NAs manually}
 # Define the time window
@@ -544,23 +579,27 @@ plot.ts(vau_window$water.turb.neg.out,
         ylab="Turbidity (NTU)")
 ```
 
-
-
 ### 3.3. Outlier detecion using the "Anomalize Package" (automatic)
 
-Anomaly detection is performed on **remainders (or residuals)** from a time series. Let's first understand what does this mean...
+Anomaly detection is performed on **remainders (or residuals)** from a
+time series. Let's first understand what does this mean...
 
 #### 3.3.1. Time Series Decomposition
 
-Time series **decomposition** is a mathematical procedure that disentangle the periodic behaviors from the general trend of a time series. Specifically, decomposition splits a time series into **3 component** **series**:
+Time series **decomposition** is a mathematical procedure that
+disentangle the periodic behaviors from the general trend of a time
+series. Specifically, decomposition splits a time series into **3
+component** **series**:
 
 -   **Trend:** The underlying trend of the metrics (increase, decrease)
 
--   **Seasonal:** Periodic behavior or cyclic pattern usually occurring on a daily, weakly, monthly or seasonal scales (depending on the data).
+-   **Seasonal:** Periodic behavior or cyclic pattern usually occurring
+    on a daily, weakly, monthly or seasonal scales (depending on the
+    data).
 
--   **Random (or residuals or remainders):** Also call "noise", "irregular" or "remainder," this is
-    the residuals of the original time series after the seasonal and
-    trend series are removed.
+-   **Random (or residuals or remainders):** Also call "noise",
+    "irregular" or "remainder," this is the residuals of the original
+    time series after the seasonal and trend series are removed.
 
 **Applications:**
 
@@ -571,8 +610,9 @@ Time series **decomposition** is a mathematical procedure that disentangle the p
 
 -   Removing the trend from a time series - forecasting future seasonal
     patterns.
-    
--   Detecting outliers and anomalies - Anomaly detection is performed on remainders (or residuals) from a time series.
+
+-   Detecting outliers and anomalies - Anomaly detection is performed on
+    remainders (or residuals) from a time series.
 
 **R Functions**
 
@@ -588,24 +628,46 @@ most common ones are.
 -   *`dts1`* () and *`dts2`* (), package *`ggplottimeseries` -* use a
     moving average decomposition
 
-##### Example 1: The "AirPassengers" TS using `decompose` in `stats`	package
+##### Example 1: The "AirPassengers" TS using `decompose` in `stats` package
 
 ```{r decomposition.stats}
 AirPassengers_decomp<- decompose(AirPassengers)
 plot(AirPassengers_decomp)
+
+##la seasonal seria por ejemplo que en verano o vaciones se mueve ma gente en tren. y random seria si 
+# por ejemplo un año hay unas olimpiadas o algo asi, es algo que no depende de la trend ni de la season. 
+
 ```
 
-##### Example 2: The "VAU" TS using `time_decompose` in `anomalize`	package
+##### Example 2: The "VAU" TS using `time_decompose` in `anomalize` package
 
-There are many ways (or methods) by which a time series can be decomposed (or deconstructed) to produce residuals: including moving averages, additive and multiplicative decomposition, ARIMA, and so on. For anomaly detection, we have seen the best performance using *seasonal decomposition* (see Hyndman, R. & Athanaspoulus , G. 2018 *Time series decomposition* in the `Session ressources` section)
+There are many ways (or methods) by which a time series can be
+decomposed (or deconstructed) to produce residuals: including moving
+averages, additive and multiplicative decomposition, ARIMA, and so on.
+For anomaly detection, we have seen the best performance using *seasonal
+decomposition* (see Hyndman, R. & Athanaspoulus , G. 2018 *Time series
+decomposition* in the `Session ressources` section)
 
-The `anomalize` package implements two techniques for seasonal decomposition:
+The `anomalize` package implements two techniques for seasonal
+decomposition:
 
-STL: “Seasonal Decomposition of Time Series by Loess. The STL method uses the `stl()` function from the `stats` package. STL works very well in circumstances where a long term trend is present. The Loess algorithm typically does a very good job at detecting the trend. However, it circumstances when the seasonal component is more dominant than the trend, Twitter tends to perform better.
+STL: "Seasonal Decomposition of Time Series by Loess. The STL method
+uses the `stl()` function from the `stats` package. STL works very well
+in circumstances where a long term trend is present. The Loess algorithm
+typically does a very good job at detecting the trend. However, it
+circumstances when the seasonal component is more dominant than the
+trend, Twitter tends to perform better.
 
-Twitter: Seasonal Decomposition of Time Series by Median. The Twitter method is a similar decomposition method to that used in Twitter’s `AnomalyDetection` package. The Twitter method works identically to STL for removing the seasonal component. The main difference is in removing the trend, which is performed by removing the median of the data rather than fitting a smoother. The median works well when a long-term trend is less dominant that the short-term seasonal component. This is because the smoother tends to overfit the anomalies.
+Twitter: Seasonal Decomposition of Time Series by Median. The Twitter
+method is a similar decomposition method to that used in Twitter's
+`AnomalyDetection` package. The Twitter method works identically to STL
+for removing the seasonal component. The main difference is in removing
+the trend, which is performed by removing the median of the data rather
+than fitting a smoother. The median works well when a long-term trend is
+less dominant that the short-term seasonal component. This is because
+the smoother tends to overfit the anomalies.
 
-Let's subset the  "vau" data frame to make the computations faster:
+Let's subset the "vau" data frame to make the computations faster:
 
 ```{r subset data.frame.2}
 vau$date<-as.Date(vau$date)
@@ -617,8 +679,9 @@ vau_window<-vau %>% filter(between(date,
 vau_window <- as_tibble(vau_window)
 ```
 
-In this session we will focus in stream water temperature. Let's have a look how this TS looks like: 
-    
+In this session we will focus in stream water temperature. Let's have a
+look how this TS looks like:
+
 ```{r visualize.4}
 par(mfrow= c(1,1), mar = c(3,4.5,0.5,0.5))
 plot.ts(vau_window$water.turb,
@@ -630,6 +693,7 @@ plot.ts(vau_window$water.turb,
 ```
 
 Decomposing our temperature TS following the Stl method:
+
 ```{r decomposition.stl}
 vau_decomp  = vau_window %>%
               time_decompose(water.turb, 
@@ -637,7 +701,12 @@ vau_decomp  = vau_window %>%
                              trend= "auto",
                              frequency = "1 month")
 ```
-The arguments `frequency` and `trend` are set as "auto" by default. When “auto” is used, a `get_time_scale_template()` is used to determine logical frequency and trend spans based on the scale of the data. However, they can be manually adjusted adding this functions to the code.
+
+The arguments `frequency` and `trend` are set as "auto" by default. When
+"auto" is used, a `get_time_scale_template()` is used to determine
+logical frequency and trend spans based on the scale of the data.
+However, they can be manually adjusted adding this functions to the
+code.
 
 Let's have a look how the different components of the TS look like:
 
@@ -653,11 +722,21 @@ plot(vau_decomp$remainder, ylab="Random")
 
 The `anomalize` package implements two methods to detect anomalies:
 
-IQR: Inner Quartile Range. It takes a distribution and uses the 25% and 75% inner quartile range to establish the distribution of the remainder. Limits are set by default to a factor of 3X above and below the inner quartile range, and any remainders beyond the limits are considered anomalies.
+IQR: Inner Quartile Range. It takes a distribution and uses the 25% and
+75% inner quartile range to establish the distribution of the remainder.
+Limits are set by default to a factor of 3X above and below the inner
+quartile range, and any remainders beyond the limits are considered
+anomalies.
 
-Alpha factor= by default is set at 0.05 (a 3X factor with respect to the inter-quartilic range). An alpha = 0.025, results in a 6X factor, expanding the limits and making it more difficult for data to be an anomaly. Conversely, an alpha = 0.10 contracts the limits to a factor of 1.5X making it more easy for data to be an anomaly.
+Alpha factor= by default is set at 0.05 (a 3X factor with respect to the
+inter-quartilic range). An alpha = 0.025, results in a 6X factor,
+expanding the limits and making it more difficult for data to be an
+anomaly. Conversely, an alpha = 0.10 contracts the limits to a factor of
+1.5X making it more easy for data to be an anomaly.
 
-Let's see an example of anomaly detection protocol (using the IQR method) and being very restrictive with the definition of outlier (alpha = 0.05):
+Let's see an example of anomaly detection protocol (using the IQR
+method) and being very restrictive with the definition of outlier (alpha
+= 0.05):
 
 ```{r anomaly.iqr1}
 vau_window%>%
@@ -670,7 +749,9 @@ vau_window%>%
   plot_anomalies(time_recompose = T)+ ggtitle("alpha = 0.05")
 ```
 
-Let’s play with this arguments (fine-tunning the method according to our needs). For example, with an alpha = 0.025, pretty much anything is considered and outlier.
+Let's play with this arguments (fine-tunning the method according to our
+needs). For example, with an alpha = 0.025, pretty much anything is
+considered and outlier.
 
 ```{r anomaly.iqr2}
 vau_window%>%
@@ -685,7 +766,12 @@ vau_window%>%
 
 #### 3.3.3. Removal of outliers
 
-Every process done after detecting anomalies (e.g., regression or forecasting) will benefit by cleaning anomalous data prior to go for it. This is the perfect use case for integrating the clean_anomalies() function into your forecast workflow.
+NOTA: paquete Data Clean R : to manually tag your errors
+
+Every process done after detecting anomalies (e.g., regression or
+forecasting) will benefit by cleaning anomalous data prior to go for it.
+This is the perfect use case for integrating the clean_anomalies()
+function into your forecast workflow.
 
 ```{r is.anomaly}
 is.anomaly.table<-vau_window%>%
@@ -696,44 +782,54 @@ is.anomaly.table<-vau_window%>%
 
 ```
 
-From the table we are interested in the column "anomaly" as it is the identifier that will use to perform the replacement for a "NA"
+From the table we are interested in the column "anomaly" as it is the
+identifier that will use to perform the replacement for a "NA"
 
 ```{r replacement}
 is.anomaly.table$observed <- replace(is.anomaly.table$observed, 
                                      is.anomaly.table$anomaly== "Yes", NA)
 ```
 
-Let's have a look if this new data frame contains "NA's" instead of anomalies patterns.The `ggplot_na_distribution` function is very useful to visually locate the gaps in new the anomaly-free TS.
+Let's have a look if this new data frame contains "NA's" instead of
+anomalies patterns.The `ggplot_na_distribution` function is very useful
+to visually locate the gaps in new the anomaly-free TS.
 
 ```{r vis.gap.diagnosis}
 ggplot_na_distribution(is.anomaly.table$observed)
 ```
 
-The function `vis_miss`from the `naniar` library provides additional information on the % of NAs of the whole dataset as well as of the specific variables of the TS:
+The function `vis_miss`from the `naniar` library provides additional
+information on the % of NAs of the whole dataset as well as of the
+specific variables of the TS:
 
 ```{r visualize NAs anomlay}
 vis_miss(is.anomaly.table)
 ```
 
-
-
 # Exercise 1: Detection of anomalies in a long-term TS of snow cover in the Pyrenees.
 
-We first need to set up the working directory (i.e., folder where where R will find the files or/and store the outputs). This path MUST correspond to the path where your data is stored:
+We first need to set up the working directory (i.e., folder where where
+R will find the files or/and store the outputs). This path MUST
+correspond to the path where your data is stored:
 
 ```{r set working directory.exercise}
 setwd("C:/Users/lgomez/Mi unidad/Teaching and research GENERAL/00_Teaching/Introduction to time series analysis in Ecology (SIBECOL)/Time series 2024 (SIBECOL)/Sessions")
 getwd()
 ```
 
-Let's now read the .csv file need it for the exercise, for this we will use the function `read_csv()`, which is part of the core `tidyverse`.
+Let's now read the .csv file need it for the exercise, for this we will
+use the function `read_csv()`, which is part of the core `tidyverse`.
 
 ```{r read files.exercise}
 snow_pyr <- read_csv('Data/snow_pyrenees_anomaly.csv')
 ```
 
-In this exercise we will focus in the long-term TS of snow cover in the Pyrenees obtained by the Moderate Resolution Imaging Spectroradiometer (MODIS) instrument.
-For a more detailed description of the methods see:[Website](https://zenodo.org/record/162299#.YkgWtyjP02w). Additionally, the updated data is visible here: [Website](https://labo.obs-mip.fr/multitemp/pyrenees-snow-monitor/).
+In this exercise we will focus in the long-term TS of snow cover in the
+Pyrenees obtained by the Moderate Resolution Imaging Spectroradiometer
+(MODIS) instrument. For a more detailed description of the methods
+see:[Website](https://zenodo.org/record/162299#.YkgWtyjP02w).
+Additionally, the updated data is visible here:
+[Website](https://labo.obs-mip.fr/multitemp/pyrenees-snow-monitor/).
 
 In this TS we have intentionally created anomalies.
 
@@ -741,16 +837,17 @@ In this TS we have intentionally created anomalies.
 snow_pyr <- as_tibble(snow_pyr)
 ```
 
-Let's have a look how this TS looks like: 
+Let's have a look how this TS looks like:
 
 ```{r visualize.exercise}
 plot.ts(snow_pyr)
 plot(snow_pyr$date,snow_pyr$snow_area_km2)
 ```
 
-## Question 1: Decompose the variable "snow_area_km2 and obtain the remainders component. 
+## Question 1: Decompose the variable "snow_area_km2 and obtain the remainders component.
 
-Decomposing our Snow area TS following the Stl method (play with the frequency and trend arguments):
+Decomposing our Snow area TS following the Stl method (play with the
+frequency and trend arguments):
 
 ```{r decomposition.stl.exercise}
 snow_decomp  = snow_pyr %>%
@@ -759,6 +856,7 @@ snow_decomp  = snow_pyr %>%
                  trend = "15 year",
                  frequency = "4 month")
 ```
+
 Let's have a look how the differences components of the TS look like:
 
 ```{r visualize.decomposition.exercise}
@@ -769,10 +867,9 @@ plot(snow_decomp$season)
 plot(snow_decomp$remainder)
 ```
 
-## Question 2. Locate Anomalies in the Remainders 
+## Question 2. Locate Anomalies in the Remainders
 
-Tips:
-- fine-tune the method to get the best out of it.
+Tips: - fine-tune the method to get the best out of it.
 
 ```{r anomaly.exercise.iqr}
 snow_pyr%>%
@@ -799,20 +896,25 @@ is.anomaly.table<-snow_pyr%>%
   clean_anomalies()  
 ```
 
-From the table we are interested in the column "anomaly" as it is the identifier that will use to perform the replacement for a "NA"
+From the table we are interested in the column "anomaly" as it is the
+identifier that will use to perform the replacement for a "NA"
 
 ```{r replacement.exercise}
 is.anomaly.table$observed <- replace(is.anomaly.table$observed, 
                                      is.anomaly.table$anomaly== "Yes", NA)
 ```
 
-Let's have a look if this new data frame contains "NA's" instead of anomalies patterns.The `ggplot_na_distribution` function is very useful to visually locate the gaps in new the anomaly-free TS.
+Let's have a look if this new data frame contains "NA's" instead of
+anomalies patterns.The `ggplot_na_distribution` function is very useful
+to visually locate the gaps in new the anomaly-free TS.
 
 ```{r vis.gap.diagnosis.exercise}
 ggplot_na_distribution(is.anomaly.table$observed)
 ```
 
-The function `vis_miss`from the `naniar` library provides additional information on the % of NAs of the whole dataset as well as of the specific variables of the TS:
+The function `vis_miss`from the `naniar` library provides additional
+information on the % of NAs of the whole dataset as well as of the
+specific variables of the TS:
 
 ```{r visualize NAs anomlay.exercise}
 vis_miss(is.anomaly.table)
@@ -820,53 +922,73 @@ vis_miss(is.anomaly.table)
 
 # Session resources
 
- Resources
+Resources
 
-## - Import, dates and times 
+## - Import, dates and times
 
--   On-line course "R for Data Science" *Data import* [Website](https://r4ds.had.co.nz/data-import.html).
+-   On-line course "R for Data Science" *Data import*
+    [Website](https://r4ds.had.co.nz/data-import.html).
 
--   On-line course "R for Data Science" *Dates and times* [Website](https://r4ds.had.co.nz/dates-and-times.html).
-
+-   On-line course "R for Data Science" *Dates and times*
+    [Website](https://r4ds.had.co.nz/dates-and-times.html).
 
 ## - Basic exploration
--   DataCamp Online Course *Time Series Analysis in R* [Website](https://app.datacamp.com/learn/courses/time-series-analysis-in-r).
+
+-   DataCamp Online Course *Time Series Analysis in R*
+    [Website](https://app.datacamp.com/learn/courses/time-series-analysis-in-r).
 
 ## - Visualitzation
 
 ### General visualitzation tutorials
 
--   You can find a quite extensive tutorial at *Using R for Time Series Analysis* [Website](https://a-little-book-of-r-for-time-series.readthedocs.io/en/latest/src/timeseries.html)
+-   You can find a quite extensive tutorial at *Using R for Time Series
+    Analysis*
+    [Website](https://a-little-book-of-r-for-time-series.readthedocs.io/en/latest/src/timeseries.html)
 
--   You can find a list of R packages for analysing time series data on the *CRAN Time Series Task View webpage* [Website](https://cran.r-project.org/web/views/TimeSeries.html)
+-   You can find a list of R packages for analysing time series data on
+    the *CRAN Time Series Task View webpage*
+    [Website](https://cran.r-project.org/web/views/TimeSeries.html)
 
 ### Advanced visualitzation tools
 
-*Streamflow Joyplot Tool* [Website](https://github.com/codeswitching/Streamflow-Joyplot-Tool).
+*Streamflow Joyplot Tool*
+[Website](https://github.com/codeswitching/Streamflow-Joyplot-Tool).
 
-*Streamflow Joyplot Tool (example 3D)* [Website](https://github.com/codeswitching/Streamflow-Joyplot-Tool/blob/master/plots/3d%20flow%20Green%20raytraced.png).
+*Streamflow Joyplot Tool (example 3D)*
+[Website](https://github.com/codeswitching/Streamflow-Joyplot-Tool/blob/master/plots/3d%20flow%20Green%20raytraced.png).
 
-*Spiral plots with Spiralize Package* [Website](https://jokergoo.github.io/spiralize_vignettes/spiralize.html).
+*Spiral plots with Spiralize Package*
+[Website](https://jokergoo.github.io/spiralize_vignettes/spiralize.html).
 
 *Spiral plots (example NASA)* [Website](https://svs.gsfc.nasa.gov/4975).
 
 ### Visualization of sensor time series for the general public
 
-*VizLab USGS* [Website](https://labs.waterdata.usgs.gov/visualizations/vizlab-home/index.html#/).
+*VizLab USGS*
+[Website](https://labs.waterdata.usgs.gov/visualizations/vizlab-home/index.html#/).
 
 ## - Decomposition and automatic outlier detection
-* Dancho, M. & Vaughan, D. *Anomalize github webpage* [Website](https://github.com/business-science/anomalize).
-* Dancho, M. & Vaughan, D. *Anomalize Quick Start Guide* [Website](https://cran.r-project.org/web/packages/anomalize/vignettes/anomalize_quick_start_guide.html).
-* Dancho, M. & Vaughan, D. *Anomalize Methods* [Website](https://cran.r-project.org/web/packages/anomalize/vignettes/anomalize_methods.html).
-* Dancho, M. & Vaughan, D. *Introduction To Anomalize - Youtube video* [Website](https://www.youtube.com/watch?v=Gk_HwjhlQJs).
-* Hochenbaum, J. & Vallis , O. *AnomalyDetection github webpage* [Website](https://github.com/twitter/AnomalyDetection).
-* Hyndman, R. & Athanaspoulus , G. 2018 *Time series decomposition* [Website](https://otexts.com/fpp2/decomposition.html).
+
+-   Dancho, M. & Vaughan, D. *Anomalize github webpage*
+    [Website](https://github.com/business-science/anomalize).
+-   Dancho, M. & Vaughan, D. *Anomalize Quick Start Guide*
+    [Website](https://cran.r-project.org/web/packages/anomalize/vignettes/anomalize_quick_start_guide.html).
+-   Dancho, M. & Vaughan, D. *Anomalize Methods*
+    [Website](https://cran.r-project.org/web/packages/anomalize/vignettes/anomalize_methods.html).
+-   Dancho, M. & Vaughan, D. *Introduction To Anomalize - Youtube video*
+    [Website](https://www.youtube.com/watch?v=Gk_HwjhlQJs).
+-   Hochenbaum, J. & Vallis , O. *AnomalyDetection github webpage*
+    [Website](https://github.com/twitter/AnomalyDetection).
+-   Hyndman, R. & Athanaspoulus , G. 2018 *Time series decomposition*
+    [Website](https://otexts.com/fpp2/decomposition.html).
 
 ## - Automated anomaly detection
-* Leigh et al., 2019 *A framework for automated anomaly detection in high frequency water-quality data from in situ sensors* [File](https://www.dropbox.com/s/4p1irewuign71u9/Leigh%20et%20al.%2C%202019.pdf?dl=0)
 
-* Dilini Talagala et al., 2019 *A Feature-Based Procedure for Detecting Technical Outliers inWater-Quality Data From In Situ Sensors* [File](https://www.dropbox.com/s/ak8jl01aiixavqc/Dilini%20Talagala%20et%20al.%2C%202019.pdf?dl=0)
+-   Leigh et al., 2019 *A framework for automated anomaly detection in
+    high frequency water-quality data from in situ sensors*
+    [File](https://www.dropbox.com/s/4p1irewuign71u9/Leigh%20et%20al.%2C%202019.pdf?dl=0)
 
-
-
-
+-   Dilini Talagala et al., 2019 *A Feature-Based Procedure for
+    Detecting Technical Outliers inWater-Quality Data From In Situ
+    Sensors*
+    [File](https://www.dropbox.com/s/ak8jl01aiixavqc/Dilini%20Talagala%20et%20al.%2C%202019.pdf?dl=0)
