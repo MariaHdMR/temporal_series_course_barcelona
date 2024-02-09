@@ -610,7 +610,7 @@ dat_daily_2019 = dat_2019 %>%
             air.light.mean = mean(air.light, na.rm= TRUE),
             water.O2.range = max(water.O2, na.rm= TRUE)- min(water.O2, na.rm= TRUE),
             #we transform the time series from a 10-min frequency to daily here
-            .by= "date")
+            .by= "date") # el by aqui es como el group by. 
 
 ## Function correlation between temperature and O2 range
 cor.test(
@@ -702,6 +702,8 @@ compare two time series and objectively determine how well they match up
 with each other and, in particular, **at what point the best match
 occurs**.
 
+NOTA: esto lo que hace es ver s dos puntos de una misma serie temporal estan correlacionadas o no
+
 **Interpretation:**
 
 -   **Correlation coefficient (r)**: ranges from -1 to 1. Values close
@@ -742,6 +744,8 @@ ccf (dat_2019$air.temp, dat_2019$water.temp,
      na.action = na.pass,
      #indicate if you want the plot
      plot = "TRUE")
+#ACF es el coeficiente de correlacion
+#
 
 ```
 
@@ -782,6 +786,8 @@ Find_Max_CCF = function(x,y) {
 
 Find_Max_CCF (dat_2019$air.temp, dat_2019$water.temp)
 
+# esto lo que hace es sacarnos el punto máximo de la curva de distribucion y sacar el valor de la x que correspode con el valor mas alto.
+
 ```
 
 ------------------------------------------------------------------------
@@ -797,6 +803,39 @@ Are they correlated? Positively or negatively? At which lag time?**
 ------------------------------------------------------------------------
 
 ```{r task cross corerlation}
+
+# 1) water temperature with oxygen
+ccf (dat_2019$water.O2, dat_2019$water.temp,
+     #indicate what to do with "NA".
+     na.action = na.pass,
+     #indicate if you want the plot
+     plot = "TRUE")
+
+Find_Max_CCF = function(x,y) {
+ # run cross-correlation function
+ ccf = ccf(x, y, plot = FALSE, na.action = na.pass) 
+ # build a dataset with lag times and correlation coefficients
+ res_cc = data.frame(lag = ccf$lag[,,1], cor = ccf$acf[,,1]) 
+ max = res_cc[which.max(abs(res_cc$cor)),] 
+ # return only the data of interest
+ return(max) 
+} 
+
+Find_Max_CCF (dat_2019$water.O2, dat_2019$water.temp)
+# estan negativamente correlacionados y el lag time es de 0
+
+# 2) water temperature with carbon dioxide
+
+ccf (dat_2019$water.CO2, dat_2019$water.temp,
+     #indicate what to do with "NA".
+     na.action = na.pass,
+     #indicate if you want the plot
+     plot = "TRUE")
+
+
+Find_Max_CCF (dat_2019$water.CO2, dat_2019$water.temp)
+#estan correlacionados negativos y el lag es 39
+
 
 ```
 
@@ -945,6 +984,9 @@ between 15/05/2019 and 15/09/2019. What are they telling us?**
 ```{r task biwavelet}
 
 
+
+
+
 ```
 
 ## 2.4 Correlating more than two time series
@@ -1029,6 +1071,7 @@ cor_SWC
     alternative for these cases is to use the **Kuramato index** (for
     more information, go to section *interesting resources*).
 
+NOTA: el indice de kuramato va de 0 a 1
 ------------------------------------------------------------------------
 
 ::: {align="center"}
@@ -1043,6 +1086,43 @@ SWC as well?**
 ------------------------------------------------------------------------
 
 ```{r task synchrony}
+
+
+cor_TS = dat_soils %>%
+          # transform datetime to posixct data
+          mutate (datetime = as.POSIXct(datetime,
+                                    tz = "UTC", format = c("%d/%m/%Y %H:%M"))) %>%
+          # add variable week
+          mutate (week = week(datetime)) %>%
+          # select variables week + SWC
+          select (week, TS1:TS4) %>%
+          # group data by week
+          group_by(week) %>%
+          # for each week, calculate the correlation coefficient
+          #between all possible pairs of sensors
+          # this code is to visualize the steps using the same functions as above
+          # if you have several sensors, it will save time to create a loop
+          summarize(
+            cor_s1_s2 = cor(TS1, TS2),
+            cor_s1_s3 = cor(TS1, TS3),
+            cor_s1_s4 = cor(TS1, TS4),
+            cor_s2_s3 = cor(TS2, TS3),
+            cor_s2_s4 = cor(TS2, TS4),
+            cor_s3_s4 = cor(TS3, TS4)
+            ) %>%
+          # calculate the mean correlation coefficient
+          mutate (mean_cor_TS = rowMeans(select(., starts_with("cor_s")))) %>%
+          # select week and mean correlation coefficient
+          select (week, mean_cor_TS)
+
+cor_TS
+
+
+cor <- full_join(cor_SWC, cor_TS)
+
+ggplot(cor, aes(x=mean_cor_SWC, y = mean_cor_TS, color= week))+
+  geom_point()+
+  geom_smooth(method = "lm")
 
 ```
 
@@ -1094,7 +1174,11 @@ mod = lm (water.O2.range ~ air.light.mean, data = dat_daily_2019)
 # summary of the model
 summary(mod)
 #check temporal autocorrelation of the residuals
-acf(mod$residuals)
+acf(mod$residuals) # aqui vemos que hay autocorrelacion
+
+library(DHARMa)
+
+simulateResiduals(fittedModel = mod, plot = T) #aqui no vemos si hay autocorrelacion o no
 
 ```
 
@@ -1126,6 +1210,8 @@ your regression model. The most common methods are:
     not as powerful as other models, they are much easier to use, and
     are more than "good enough" if you use multiple regressions for
     exploratory proposes (not for forecasting).
+    
+    #NOTA: la gente de series temporales suele usar gls en vez de lme, que parece ser que funciona mejor
 
 -   **Residual Transformation:** Transform the dependent variable or the
     residuals using techniques such as differencing or detrending.
@@ -1322,6 +1408,11 @@ medes_biomass= read.csv (file = "Medes_Biomass.csv",
                 stringsAsFactors = F)
 ```
 
+### NOTA: lo primero que tengo que hacer es hacer la media por ejemplo al mes. 
+El siguiente paso sera hacer descompose
+y el diguiente es hacer un model regresion. 
+
+
 ------------------------------------------------------------------------
 
 ::: {align="center"}
@@ -1330,6 +1421,13 @@ medes_biomass= read.csv (file = "Medes_Biomass.csv",
 Which analysis will you perform?\
 Run them to answer the question
 :::
+
+# nota: 
+hacer: 
+1) cross correlation
+2) deal with annual data
+3) point cero would be summer, porque es de lo que tienen datos de la biomasa
+4) model regression de la lag time que hemos visto. 
 
 ------------------------------------------------------------------------
 
